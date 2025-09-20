@@ -50,15 +50,65 @@ backup_and_link "$DOTFILES_DIR/.zprofile" "$HOME/.zprofile"
 backup_and_link "$DOTFILES_DIR/.config/mise" "$HOME/.config/mise"
 
 echo "✅ Dotfiles installation completed!"
-echo "🔄 Please restart your shell or run: source ~/.zshrc"
 
-# Git configuration prompt
+# ==============================================================================
+# Homebrew Setup
+# ==============================================================================
+
+echo ""
+echo "🍺 Setting up Homebrew..."
+
+# Check if Homebrew is installed
+if ! command -v brew &> /dev/null; then
+    echo "📥 Homebrew not found. Installing Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    
+    # Add Homebrew to PATH for this session
+    if [[ -f "/opt/homebrew/bin/brew" ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -f "/usr/local/bin/brew" ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+else
+    echo "✅ Homebrew is already installed"
+fi
+
+# Install packages from Brewfile
+if [[ -f "$DOTFILES_DIR/Brewfile" ]]; then
+    echo "📦 Installing packages from Brewfile..."
+    cd "$DOTFILES_DIR"
+    brew bundle install --no-lock
+    echo "✅ Homebrew packages installation completed!"
+else
+    echo "⚠️  No Brewfile found. Skipping package installation."
+fi
+
+# ==============================================================================
+# Git Configuration
+# ==============================================================================
+
+echo ""
 if ! git config --global user.name > /dev/null 2>&1; then
-    echo ""
     echo "⚙️  Git configuration needed:"
     read -p "Enter your Git username: " git_username
     read -p "Enter your Git email: " git_email
     git config --global user.name "$git_username"
     git config --global user.email "$git_email"
     echo "✅ Git configuration completed!"
+else
+    echo "✅ Git is already configured"
 fi
+
+# ==============================================================================
+# Final Setup
+# ==============================================================================
+
+echo ""
+echo "🎉 Setup completed successfully!"
+echo ""
+echo "📋 What was installed:"
+echo "  • Dotfiles (symlinked to $DOTFILES_DIR)"
+echo "  • Homebrew packages from Brewfile"
+echo "  • Git configuration"
+echo ""
+echo "🔄 Please restart your shell or run: source ~/.zshrc"
