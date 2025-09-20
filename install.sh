@@ -48,6 +48,7 @@ echo "📝 Installing dotfiles..."
 backup_and_link "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
 backup_and_link "$DOTFILES_DIR/.zprofile" "$HOME/.zprofile"
 backup_and_link "$DOTFILES_DIR/.config/mise" "$HOME/.config/mise"
+backup_and_link "$DOTFILES_DIR/.gitconfig" "$HOME/.gitconfig"
 
 echo "✅ Dotfiles installation completed!"
 
