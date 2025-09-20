@@ -1,0 +1,35 @@
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.bak
+
+# Private/sensitive files
+.env
+.env.local
+secrets/
+
+# ZSH compiled files
+.zcompdump*
+.zsh_history
+
+# Vim
+.viminfo
+*.netrwhist
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# OS generated files
+.CFUserTextEncoding
