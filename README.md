@@ -9,6 +9,7 @@ Personal dotfiles for macOS development environment.
 - **`.config/mise`** - mise (development environment manager) configuration
 - **`Brewfile`** - Homebrew packages and casks management
 - **`install.sh`** - Automated installation script
+- **`update.sh`** - Easy update script for keeping dotfiles in sync
 
 ## Installation
 
@@ -91,6 +92,38 @@ git push
 
 ### Installing Packages on New Machine
 The `install.sh` script automatically installs all packages from the Brewfile.
+
+## Updating Your Dotfiles
+
+### Easy Update (Recommended)
+```bash
+cd ~/dotfiles
+./update.sh
+```
+
+This script will:
+- Copy any changed dotfiles from your home directory
+- Update Brewfile with newly installed packages
+- Show you what changed and help you commit/push
+
+### Manual Update
+When you modify your shell settings or install new packages:
+
+```bash
+cd ~/dotfiles
+
+# Copy updated files manually (if needed)
+cp ~/.zshrc .
+cp ~/.zprofile .
+
+# Update Brewfile with new packages
+brew bundle dump --force
+
+# Commit and push
+git add .
+git commit -m "Update: describe your changes"
+git push
+```
 
 ## Customization
 
