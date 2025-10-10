@@ -1,3 +1,7 @@
 [tools]
-python = "3.13.1"
+gcloud = "latest"
+python = "latest"
 uv = "latest"
+
+[settings]
+idiomatic_version_file_enable_tools = ["python"]
