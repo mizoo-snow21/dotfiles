@@ -7,6 +7,7 @@ Personal dotfiles for macOS development environment.
 - **`.zshrc`** - Zsh configuration with Homebrew and mise integration
 - **`.zprofile`** - Zsh profile with Homebrew environment setup
 - **`.config/mise`** - mise (development environment manager) configuration
+- **`.cursor`** - Cursor IDE configuration (settings, extensions, commands)
 - **`Brewfile`** - Homebrew packages and casks management
 - **`install.sh`** - Automated installation script
 - **`update.sh`** - Easy update script for keeping dotfiles in sync
@@ -44,6 +45,7 @@ cd ~/dotfiles
 
 - **Backup Protection**: Creates backups of your existing dotfiles in `~/.dotfiles_backup`
 - **Dotfiles Setup**: Creates symbolic links from your home directory to the dotfiles in this repo
+- **Cursor Configuration**: Manages Cursor IDE settings, extensions, and custom commands
 - **Homebrew Management**: Installs Homebrew (if not present) and all packages from `Brewfile`
 - **Git Configuration**: Configures Git if not already set up
 - **Development Tools**: Sets up mise for managing multiple language versions
@@ -59,6 +61,12 @@ cd ~/dotfiles
 ### Development Tools
 - mise configuration for managing multiple language versions
 - Homebrew package management setup
+
+### Cursor IDE Configuration
+- IDE settings and preferences
+- Installed extensions and their configurations
+- Custom commands (like criticalthink.md)
+- MCP server configurations
 
 ### Package Management
 - **Brewfile**: Automatically installs all your CLI tools, GUI apps, and utilities

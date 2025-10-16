@@ -49,6 +49,9 @@ backup_and_link "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
 backup_and_link "$DOTFILES_DIR/.zprofile" "$HOME/.zprofile"
 backup_and_link "$DOTFILES_DIR/.config/mise" "$HOME/.config/mise"
 
+# Cursor configuration
+backup_and_link "$DOTFILES_DIR/.cursor" "$HOME/.cursor"
+
 echo "✅ Dotfiles installation completed!"
 
 # ==============================================================================
