@@ -1,6 +1,7 @@
 [tools]
 gcloud = "latest"
 node = "latest"
+"npm:claude-code-monitor" = "latest"
 python = "latest"
 uv = "latest"
 
