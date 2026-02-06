@@ -24,7 +24,13 @@ cd ~/dotfiles
 
 - Cursor: `~/.cursor/skills/`
 - Claude Code: `~/.claude/skills/`
-- Connex: 設定により異なる
+- Codex: `~/.codex/skills/`
+
+## 注意点
+
+- `npx skills` が検出できたクライアントのみ自動インストールされます。
+- 使うクライアントのスキル保存先が異なる場合は手動で調整が必要です。
+- `install-agent-skills.sh` は Codex 用に `~/.codex/skills` を `~/.cursor/skills` へリンクします。
 
 ## 参考
 

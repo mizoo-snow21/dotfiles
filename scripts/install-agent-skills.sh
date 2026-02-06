@@ -55,6 +55,28 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 done < "$SKILLS_LIST"
 
 echo ""
+echo "🔗 Checking Codex skills linkage..."
+
+cursor_skills_dir="$HOME/.cursor/skills"
+codex_dir="$HOME/.codex"
+codex_skills_dir="$codex_dir/skills"
+
+if [[ -d "$cursor_skills_dir" ]]; then
+    mkdir -p "$codex_dir"
+    if [[ -e "$codex_skills_dir" ]] && [[ ! -L "$codex_skills_dir" ]]; then
+        echo "⚠️  Codex skills directory exists and is not a symlink."
+        echo "   Path: $codex_skills_dir"
+    elif [[ ! -e "$codex_skills_dir" ]]; then
+        ln -s "$cursor_skills_dir" "$codex_skills_dir"
+        echo "✅ Linked Codex skills to Cursor skills: $codex_skills_dir"
+    else
+        echo "✅ Codex skills link already exists: $codex_skills_dir"
+    fi
+else
+    echo "⚠️  Cursor skills directory not found. Skipping Codex linkage."
+fi
+
+echo ""
 echo "🎉 Agent skills installation completed!"
 echo "   Installed: $installed_count"
 echo "   Skipped/Failed: $skipped_count"
