@@ -1,0 +1,9 @@
+# Agent Skills List
+# このファイルにはインストールするエージェントスキルのリストを記載します
+# インストール方法: npx skills add <owner/repo>
+
+# 公式スキルコレクション
+vercel-labs/agent-skills
+
+# カスタムスキルを追加する場合は以下に記載
+# owner/custom-skill-name

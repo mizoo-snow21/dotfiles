@@ -103,6 +103,22 @@ else
 fi
 
 # ==============================================================================
+# MCP Configuration Setup (Optional)
+# ==============================================================================
+
+echo ""
+if [[ -f "$DOTFILES_DIR/scripts/setup-mcp.sh" ]]; then
+    echo "🔧 MCP configuration setup available"
+    read -p "Do you want to set up MCP configuration now? (y/N): " setup_mcp
+    if [[ "$setup_mcp" =~ ^[Yy]$ ]]; then
+        bash "$DOTFILES_DIR/scripts/setup-mcp.sh"
+    else
+        echo "⏭️  Skipping MCP configuration setup"
+        echo "   You can run it later with: ./scripts/setup-mcp.sh"
+    fi
+fi
+
+# ==============================================================================
 # Final Setup
 # ==============================================================================
 

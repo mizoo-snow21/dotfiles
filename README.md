@@ -66,7 +66,18 @@ cd ~/dotfiles
 - IDE settings and preferences
 - Installed extensions and their configurations
 - Custom commands (like criticalthink.md)
-- MCP server configurations
+- MCP server configurations (secure, environment variable-based)
+
+### MCP Configuration
+- **Secure configuration**: API keys managed via environment variables
+- **Multi-tool support**: Unified configuration for Cursor, Claude Desktop/Code, and Codex
+- **Template-based**: JSON templates for Cursor/Claude, TOML template for Codex
+- **Setup script**: `./scripts/setup-mcp.sh` automatically configures all tools
+
+### Agent Skills Management
+- **Unified management**: Manage skills for Cursor, Claude Code, and Connex
+- **List-based**: `skills-list.txt` for tracking installed skills
+- **Installation script**: `./scripts/install-agent-skills.sh` for batch installation
 
 ### Package Management
 - **Brewfile**: Automatically installs all your CLI tools, GUI apps, and utilities
@@ -133,6 +144,73 @@ git commit -m "Update: describe your changes"
 git push
 ```
 
+## MCP Configuration Setup
+
+### Initial Setup
+
+1. Set environment variables in `~/.zshrc` or `~/.zprofile`:
+   ```bash
+   export CONTEXT7_API_KEY="your-api-key-here"
+   ```
+
+2. Run the setup script:
+   ```bash
+   cd ~/dotfiles
+   ./scripts/setup-mcp.sh
+   ```
+
+This will:
+- Generate `mcp.json.local` (for Cursor/Claude) and `codex.config.toml.local` (for Codex)
+- Create symlinks to all three tools:
+  - Cursor: `~/.cursor/mcp.json`
+  - Claude Desktop/Code: `~/Library/Application Support/Claude/claude_desktop_config.json`
+  - Codex: `~/.codex/config.toml`
+- Keep API keys secure (not in Git)
+
+### Adding New MCP Servers
+
+Edit `.config/mcp/mcp.json.template` and add your server configuration:
+```json
+{
+  "mcpServers": {
+    "server-name": {
+      "command": "npx",
+      "args": ["-y", "@package/server-name"],
+      "env": {
+        "API_KEY": "${API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Then run `./scripts/setup-mcp.sh` again.
+
+## Agent Skills Management
+
+### Installing Skills
+
+**Individual installation:**
+```bash
+npx skills add vercel-labs/agent-skills
+```
+
+**Batch installation:**
+```bash
+cd ~/dotfiles
+./scripts/install-agent-skills.sh
+```
+
+### Managing Skills List
+
+Edit `.config/agent-skills/skills-list.txt` to add/remove skills:
+```
+vercel-labs/agent-skills
+owner/custom-skill-name
+```
+
+Then run the installation script to sync.
+
 ## Customization
 
 Feel free to fork this repository and customize it for your own needs. The main files to modify are:
@@ -140,6 +218,8 @@ Feel free to fork this repository and customize it for your own needs. The main 
 - `.zshrc` - Shell configuration
 - `.zprofile` - Environment setup
 - `.config/mise/` - Development tools configuration
+- `.config/mcp/mcp.json.template` - MCP server configuration template
+- `.config/agent-skills/skills-list.txt` - Agent skills list
 
 ## Backup
 
