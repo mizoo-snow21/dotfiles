@@ -1,0 +1,23 @@
+layout {
+    pane split_direction="vertical" {                      // 横方向に分割（左右）
+        pane split_direction="horizontal" size="38%" {          // 左側全体の幅（38%は定番バランス、好みで30〜42%に調整可）、縦方向に分割（上下）
+            pane size="70%" {                                 // yazi 上部を70%（プレビューを広く）
+                command "yazi"
+                name "Yazi"
+            }
+            pane size="30%" {                                 // gitui 下部を30%（補助的にコンパクト）
+                command "gitui"
+                name "GitUI"
+            }
+        }
+
+        pane size="62%" focus=true {                          // 右側全体を62%（claudecodeをメインに広く）
+            command "claude"
+            name "ClaudeCode"
+        }
+    }
+
+    pane size=1 borderless=true {
+        plugin location="zellij:compact-bar"              // すっきりしたステータスバー（おすすめ）
+    }
+}

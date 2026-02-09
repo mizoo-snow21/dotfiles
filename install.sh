@@ -49,6 +49,7 @@ backup_and_link "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
 backup_and_link "$DOTFILES_DIR/.zprofile" "$HOME/.zprofile"
 backup_and_link "$DOTFILES_DIR/.config/mise" "$HOME/.config/mise"
 backup_and_link "$DOTFILES_DIR/.config/ghostty" "$HOME/.config/ghostty"
+backup_and_link "$DOTFILES_DIR/.config/zellij" "$HOME/.config/zellij"
 
 # Cursor configuration
 backup_and_link "$DOTFILES_DIR/.cursor" "$HOME/.cursor"
