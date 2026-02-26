@@ -26,15 +26,15 @@ backup_and_link() {
         mkdir -p "$target_dir"
     fi
     
-    # Backup existing file if it exists and is not a symlink
+    # Backup existing file/dir if it exists and is not a symlink
     if [ -e "$target" ] && [ ! -L "$target" ]; then
         echo "📋 Backing up $target"
-        cp "$target" "$BACKUP_DIR/$(basename "$target").backup"
+        [ -d "$target" ] && cp -r "$target" "$BACKUP_DIR/$(basename "$target").backup" || cp "$target" "$BACKUP_DIR/$(basename "$target").backup"
     fi
     
-    # Remove existing file/symlink
+    # Remove existing file/symlink/dir
     if [ -e "$target" ] || [ -L "$target" ]; then
-        rm -f "$target"
+        rm -rf "$target"
     fi
     
     # Create symlink
@@ -53,6 +53,9 @@ backup_and_link "$DOTFILES_DIR/.config/zellij" "$HOME/.config/zellij"
 
 # Cursor configuration
 backup_and_link "$DOTFILES_DIR/.cursor" "$HOME/.cursor"
+
+# Claude Code configuration
+backup_and_link "$DOTFILES_DIR/.claude" "$HOME/.claude"
 
 echo "✅ Dotfiles installation completed!"
 
