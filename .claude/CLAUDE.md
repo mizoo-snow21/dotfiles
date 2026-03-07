@@ -66,3 +66,34 @@ codex exec resume --last -m gpt-5.4 "The document was updated. Review it again. 
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
+
+## Python Package Management
+
+- Use `uv` for all Python dependency and environment management in this project.
+- Do not use `pip`, `pip-tools`, `poetry`, `venv`, or `source .venv/bin/activate && python ...`.
+- Use `uv add <package>`, `uv remove <package>`, and `uv sync`.
+- Run Python code with `uv run <command>` or `uv run script.py`.
+- For standalone scripts, prefer inline metadata or `uv add/remove/sync --script`.
+
+```python
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "torch",
+#     "torchvision",
+#     "opencv-python",
+#     "numpy",
+#     "matplotlib",
+#     "Pillow",
+#     "timm",
+# ]
+# ///
+```
+
+```bash
+uv add package-name --script script.py
+uv remove package-name --script script.py
+uv sync --script script.py
+uv run script.py
+```
+- If Python packages, environments, or script execution are involved, default to `uv` first.
