@@ -1,1 +1,63 @@
-{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"ccm hook UserPromptSubmit"}]}],"PreToolUse":[{"hooks":[{"type":"command","command":"ccm hook PreToolUse"}],"matcher":""}],"PostToolUse":[{"hooks":[{"type":"command","command":"ccm hook PostToolUse"}],"matcher":""}],"Notification":[{"hooks":[{"type":"command","command":"ccm hook Notification"}],"matcher":""}],"Stop":[{"hooks":[{"type":"command","command":"ccm hook Stop"}],"matcher":""}]},"env":{"CLAUDE_CODE_MONITOR_GHOSTTY_ASKED":"1","CLAUDE_CODE_DISABLE_TERMINAL_TITLE":"1"}}
+{
+  "env": {
+    "CLAUDE_CODE_MONITOR_GHOSTTY_ASKED": "1",
+    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ccm hook UserPromptSubmit"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ccm hook PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ccm hook PostToolUse"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ccm hook Notification"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ccm hook Stop"
+          }
+        ]
+      }
+    ]
+  },
+  "model": "opus"
+}
