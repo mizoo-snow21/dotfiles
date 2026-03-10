@@ -3,6 +3,11 @@
     "CLAUDE_CODE_MONITOR_GHOSTTY_ASKED": "1",
     "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"
   },
+  "permissions": {
+    "allow": [
+      "Bash(*)"
+    ]
+  },
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -68,5 +73,5 @@
       }
     ]
   },
-  "model": "opus"
+  "effortLevel": "high"
 }

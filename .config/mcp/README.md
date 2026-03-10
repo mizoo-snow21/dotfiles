@@ -24,6 +24,5 @@
 
 - **Cursor**: `~/.cursor/mcp.json` (JSON形式)
 - **Claude Desktop/Code**: `~/Library/Application Support/Claude/claude_desktop_config.json` (JSON形式)
-- **Codex**: `~/.codex/config.toml` (TOML形式)
 
-設定は各ツールにシンボリックリンクで共有されます。JSON形式のツール（Cursor、Claude）は同じ設定ファイルを共有し、CodexはTOML形式の別ファイルを使用します。
+設定は各ツールにシンボリックリンクで共有されます。CodexはMCP設定を行わず、`~/.codex/config.toml`は別途手動管理します。

@@ -70,9 +70,9 @@ cd ~/dotfiles
 
 ### MCP Configuration
 - **Secure configuration**: API keys managed via environment variables
-- **Multi-tool support**: Unified configuration for Cursor, Claude Desktop/Code, and Codex
-- **Template-based**: JSON templates for Cursor/Claude, TOML template for Codex
-- **Setup script**: `./scripts/setup-mcp.sh` automatically configures all tools
+- **Multi-tool support**: Unified configuration for Cursor and Claude Desktop/Code
+- **Template-based**: JSON templates for Cursor/Claude
+- **Setup script**: `./scripts/setup-mcp.sh` automatically configures both tools
 
 ### Agent Skills Management
 - **Unified management**: Manage skills for Cursor, Claude Code, and Connex
@@ -160,12 +160,13 @@ git push
    ```
 
 This will:
-- Generate `mcp.json.local` (for Cursor/Claude) and `codex.config.toml.local` (for Codex)
-- Create symlinks to all three tools:
+- Generate `mcp.json.local` (for Cursor/Claude)
+- Create symlinks to both tools:
   - Cursor: `~/.cursor/mcp.json`
   - Claude Desktop/Code: `~/Library/Application Support/Claude/claude_desktop_config.json`
-  - Codex: `~/.codex/config.toml`
 - Keep API keys secure (not in Git)
+
+CodexはMCP設定を行わず、`~/.codex/config.toml`は別途手動管理します。
 
 ### Adding New MCP Servers
 
