@@ -124,6 +124,22 @@ if [[ -f "$DOTFILES_DIR/scripts/setup-mcp.sh" ]]; then
 fi
 
 # ==============================================================================
+# Claude Code Plugins Setup
+# ==============================================================================
+
+echo ""
+if [[ -f "$DOTFILES_DIR/scripts/install-claude-plugins.sh" ]]; then
+    echo "🔌 Claude Code plugins setup available"
+    read -p "Do you want to install Claude Code plugins now? (y/N): " setup_plugins
+    if [[ "$setup_plugins" =~ ^[Yy]$ ]]; then
+        bash "$DOTFILES_DIR/scripts/install-claude-plugins.sh"
+    else
+        echo "⏭️  Skipping Claude Code plugins setup"
+        echo "   You can run it later with: ./scripts/install-claude-plugins.sh"
+    fi
+fi
+
+# ==============================================================================
 # Final Setup
 # ==============================================================================
 
@@ -134,5 +150,6 @@ echo "📋 What was installed:"
 echo "  • Dotfiles (symlinked to $DOTFILES_DIR)"
 echo "  • Homebrew packages from Brewfile"
 echo "  • Git configuration"
+echo "  • Claude Code plugins (if selected)"
 echo ""
 echo "🔄 Please restart your shell or run: source ~/.zshrc"

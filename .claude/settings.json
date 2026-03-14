@@ -73,5 +73,16 @@
       }
     ]
   },
-  "effortLevel": "high"
+  "extraKnownMarketplaces": {
+    "claude-code-plugins": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/anthropics/claude-code.git"
+      }
+    }
+  },
+  "effortLevel": "high",
+  "enabledPlugins": {
+    "code-review@claude-code-plugins": true
+  }
 }
