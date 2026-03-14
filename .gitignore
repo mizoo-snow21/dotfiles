@@ -26,8 +26,10 @@ secrets/
 # Claude Code runtime (cache, history, etc.)
 .claude/cache/
 .claude/debug/
+.claude/backups/
 .claude/file-history/
 .claude/history.jsonl
+.claude/paste-cache/
 .claude/plans/
 .claude/projects/
 .claude/session-env/
@@ -35,6 +37,8 @@ secrets/
 .claude/statsig/
 .claude/telemetry/
 .claude/todos/
+.claude/tasks/
+.claude/plugins/
 .config/mcp/mcp.json.local
 .config/mcp/codex.config.toml.local
 Library/Application Support/Claude/claude_desktop_config.json
