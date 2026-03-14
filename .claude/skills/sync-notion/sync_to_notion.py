@@ -21,7 +21,8 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path=Path.cwd() / ".env")
+load_dotenv()  # fallback: walk up to find .env
 
 NOTION_API = "https://api.notion.com/v1"
 NOTION_VERSION = "2025-09-03"
