@@ -9,37 +9,7 @@
     ]
   },
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "ccm hook UserPromptSubmit"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "ccm hook PreToolUse"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "ccm hook PostToolUse"
-          }
-        ]
-      },
       {
         "matcher": "Write|Edit",
         "hooks": [
@@ -50,24 +20,22 @@
         ]
       }
     ],
-    "Notification": [
+    "SessionEnd": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "ccm hook Notification"
+            "command": "bin/suggest-claude-md-hook.sh"
           }
         ]
       }
     ],
-    "Stop": [
+    "PreCompact": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "ccm hook Stop"
+            "command": "bin/suggest-claude-md-hook.sh"
           }
         ]
       }

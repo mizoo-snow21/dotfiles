@@ -9,17 +9,22 @@
 ### 2. Plan / Todo Review Loop
 - Before showing any implementation plan, spec, or todo document to the user, review it with `codex`
 - Apply this to plan-style and todo-style docs in general, not just a single filename
-- Use GPT-5.4 for these reviews
+- Try models in newest-first order (skip unavailable models and move to next):
+  1. `gpt-5.4`
+  2. `gpt-5.3-codex`
+  3. `gpt-5.2-codex`
+  4. `gpt-5.2`
+  5. `gpt-5.1-codex-max`
 - Explicitly tell `codex` to ignore nitpicks and only call out critical issues
 - Update the document and re-run the review until `codex` has no findings left
 - If you are updating an existing review, resume the latest `codex` session so the prior context is preserved
 
 ```bash
-# Initial review
-codex exec -m gpt-5.4 "Review this document. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})"
+# Initial review (use the newest available model from the list above)
+codex exec -m {model} "Review this document. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})"
 
 # Follow-up review after updates
-codex exec resume --last -m gpt-5.4 "The document was updated. Review it again. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})"
+codex exec resume --last -m {model} "The document was updated. Review it again. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})"
 ```
 
 ### 3. Subagent Strategy
