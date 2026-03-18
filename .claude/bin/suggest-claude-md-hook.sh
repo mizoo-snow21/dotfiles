@@ -1,6 +1,7 @@
 #!/bin/bash
 # CLAUDE.md更新提案フック用スクリプト
-# SessionEndフックから呼び出され、会話履歴を分析
+# SessionEnd/PreCompactフックから呼び出され、会話履歴を分析し、
+# 提案があればプロジェクトのCLAUDE.mdに保留セクションとして追記する
 
 set -euo pipefail
 
@@ -24,6 +25,7 @@ HOOK_INPUT=$(cat)
 TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | jq -r '.transcript_path')
 HOOK_EVENT_NAME=$(echo "$HOOK_INPUT" | jq -r '.hook_event_name // "Unknown"')
 TRIGGER=$(echo "$HOOK_INPUT" | jq -r '.trigger // ""')
+CWD=$(echo "$HOOK_INPUT" | jq -r '.cwd // ""')
 
 # 読み込んだJSONデータの検証
 if [ -z "$TRANSCRIPT_PATH" ] || [ "$TRANSCRIPT_PATH" = "null" ]; then
@@ -39,9 +41,13 @@ if [ ! -f "$TRANSCRIPT_PATH" ]; then
   exit 1
 fi
 
-# プロジェクトルートとログファイル名を生成
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# cwdが空の場合はスクリプトの親ディレクトリをフォールバックに使う
+if [ -z "$CWD" ] || [ "$CWD" = "null" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  CWD="$(dirname "$SCRIPT_DIR")"
+fi
+
+# ログファイル名を生成
 CONVERSATION_ID=$(basename "$TRANSCRIPT_PATH" .jsonl)
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOG_FILE="/tmp/suggest-claude-md-${CONVERSATION_ID}-${TIMESTAMP}.log"
@@ -59,9 +65,8 @@ if [ -n "$TRIGGER" ]; then
   HOOK_INFO="$HOOK_INFO (trigger: $TRIGGER)"
 fi
 
-echo "🤖 会話履歴を分析中..." >&2
+echo "suggest-claude-md-hook: 会話履歴を分析中..." >&2
 echo "$HOOK_INFO" >&2
-echo "ログファイル: $LOG_FILE" >&2
 
 # 会話履歴を抽出（contentが配列か文字列かで分岐）
 # テキストコンテンツが空のメッセージは除外
@@ -85,10 +90,11 @@ CONVERSATION_HISTORY=$(jq -r '
 
 # 会話履歴が空の場合はスキップ
 if [ -z "$CONVERSATION_HISTORY" ]; then
-  echo "Warning: No conversation history found. Skipping analysis." >&2
+  echo "suggest-claude-md-hook: No conversation history found. Skipping." >&2
   exit 0
 fi
 
+# プロンプトファイルを作成
 TEMP_PROMPT_FILE=$(mktemp)
 
 # スキル定義の内容をコピー
@@ -115,84 +121,132 @@ cat >> "$TEMP_PROMPT_FILE" <<'EOF'
 </conversation_history>
 EOF
 
-# Claudeコマンドを新しいターミナルウィンドウで実行
+# claude --print をサブプロセスとして直接実行
+echo "suggest-claude-md-hook: claude --print を実行中..." >&2
 TEMP_CLAUDE_OUTPUT=$(mktemp)
 
-echo "🚀 新しいターミナルウィンドウでCLAUDE.md更新提案を生成します..." >&2
-echo "ログファイル: $LOG_FILE" >&2
+claude --dangerously-skip-permissions --output-format text --print < "$TEMP_PROMPT_FILE" > "$TEMP_CLAUDE_OUTPUT" 2>&1 || true
 
-# ターミナルで実行するスクリプトを作成
-TEMP_SCRIPT=$(mktemp)
-
-cat > "$TEMP_SCRIPT" <<'SCRIPT'
-#!/bin/bash
-cd '$PROJECT_ROOT'
-export SUGGEST_CLAUDE_MD_RUNNING=1
-
-echo '🤖 CLAUDE.md更新提案を生成中...'
-echo '$HOOK_INFO'
-echo 'ログファイル: $LOG_FILE'
-echo 'プロンプトファイル: $TEMP_PROMPT_FILE'
-echo ''
-
-claude --dangerously-skip-permissions --output-format text --print < '$TEMP_PROMPT_FILE' | tee '$TEMP_CLAUDE_OUTPUT'
-
-echo ''
-echo '📝 ログファイルを保存中...'
-cat '$TEMP_CLAUDE_OUTPUT' > '$LOG_FILE'
-
-# フック情報とプロンプト全文をログファイルに追記
+# ログファイルに出力を保存
 {
-  echo ''
-  echo ''
-  echo '---'
-  echo ''
-  echo '## フック実行情報'
-  echo ''
-  echo '$HOOK_INFO'
-  echo 'プロンプトファイルパス: $TEMP_PROMPT_FILE'
-  echo ''
-  echo ''
-  echo '---'
-  echo ''
-  echo '## 実際に渡したプロンプト全文'
-  echo ''
-  cat '$TEMP_PROMPT_FILE'
-} >> '$LOG_FILE'
+  cat "$TEMP_CLAUDE_OUTPUT"
+  echo ""
+  echo ""
+  echo "---"
+  echo ""
+  echo "## フック実行情報"
+  echo ""
+  echo "$HOOK_INFO"
+  echo "CWD: $CWD"
+  echo ""
+  echo "---"
+  echo ""
+  echo "## 実際に渡したプロンプト全文"
+  echo ""
+  cat "$TEMP_PROMPT_FILE"
+} > "$LOG_FILE"
 
-rm -f '$TEMP_CLAUDE_OUTPUT' '$TEMP_PROMPT_FILE' '$TEMP_SCRIPT'
+CLAUDE_OUTPUT=$(cat "$TEMP_CLAUDE_OUTPUT")
+rm -f "$TEMP_CLAUDE_OUTPUT" "$TEMP_PROMPT_FILE"
 
-echo ''
-echo '✅ 完了しました'
-echo '保存先: $LOG_FILE'
-echo ''
-echo 'このウィンドウを閉じてください。このウィンドウの内容は、上記のログファイルにも出力されています。'
-
-exit
-SCRIPT
-
-# ヒアドキュメント内の変数プレースホルダーを実際の値に置換
-# 理由: <<'SCRIPT' でシングルクォートを使っているため、変数が展開されない
-#       sedで後から置換することで、特殊文字のエスケープ問題を回避しつつ安全に変数を展開
-sed -i '' "s|\$PROJECT_ROOT|$PROJECT_ROOT|g" "$TEMP_SCRIPT"
-sed -i '' "s|\$HOOK_INFO|$HOOK_INFO|g" "$TEMP_SCRIPT"
-sed -i '' "s|\$LOG_FILE|$LOG_FILE|g" "$TEMP_SCRIPT"
-sed -i '' "s|\$TEMP_PROMPT_FILE|$TEMP_PROMPT_FILE|g" "$TEMP_SCRIPT"
-sed -i '' "s|\$TEMP_CLAUDE_OUTPUT|$TEMP_CLAUDE_OUTPUT|g" "$TEMP_SCRIPT"
-sed -i '' "s|\$TEMP_SCRIPT|$TEMP_SCRIPT|g" "$TEMP_SCRIPT"
-
-chmod +x "$TEMP_SCRIPT"
-
-# Ghosttyの新しいウィンドウでスクリプトを実行
-GHOSTTY_CLI="${GHOSTTY_CLI:-/Applications/Ghostty.app/Contents/MacOS/ghostty}"
-if command -v ghostty >/dev/null 2>&1; then
-  GHOSTTY_CLI="ghostty"
+# 出力を解析: "No new content" パターンをチェック
+if echo "$CLAUDE_OUTPUT" | grep -qi "No new content to add"; then
+  echo "suggest-claude-md-hook: 提案なし。CLAUDE.mdは変更しません。" >&2
+  echo "suggest-claude-md-hook: ログ: $LOG_FILE" >&2
+  exit 0
 fi
 
-"$GHOSTTY_CLI" -e "$TEMP_SCRIPT" &
-disown
+# claude --print の出力が空またはエラーの場合もスキップ
+if [ -z "$CLAUDE_OUTPUT" ]; then
+  echo "suggest-claude-md-hook: claude --print の出力が空です。スキップします。" >&2
+  echo "suggest-claude-md-hook: ログ: $LOG_FILE" >&2
+  exit 0
+fi
 
-echo "" >&2
-echo "✅ Ghosttyウィンドウで実行中です" >&2
-echo "   結果: cat $LOG_FILE" >&2
-echo "" >&2
+# 提案内容を抽出
+# スキルの出力フォーマット:
+#   Analyzed the conversation history. Consider adding the following to CLAUDE.md:
+#   If this looks right, tell me "Add this to CLAUDE.md" and I'll apply it.
+#   [提案内容]
+#   Reason: [理由]
+
+# markdown code fence の中身を抽出（```で囲まれた部分）
+# 複数のcode fenceがある場合はすべて抽出
+PROPOSED_CONTENT=$(echo "$CLAUDE_OUTPUT" | sed -n '/^```/,/^```/{/^```/d;p}')
+
+# code fenceがない場合は、"Consider adding" 以降の本文を使う
+if [ -z "$PROPOSED_CONTENT" ]; then
+  # "Consider adding" の次の空行以降、"Reason:" の前までを抽出
+  PROPOSED_CONTENT=$(echo "$CLAUDE_OUTPUT" | sed -n '/Consider adding/,/^Reason:/{/Consider adding/d;/^Reason:/d;p}' | sed '/^$/d; /^If this looks right/d')
+fi
+
+# Reason行を抽出
+REASON=$(echo "$CLAUDE_OUTPUT" | grep -o 'Reason:.*' | head -1)
+if [ -z "$REASON" ]; then
+  REASON="Reason: (自動検出)"
+fi
+
+# 提案内容が空の場合はスキップ
+if [ -z "$PROPOSED_CONTENT" ]; then
+  echo "suggest-claude-md-hook: 提案内容の抽出に失敗しました。ログを確認してください。" >&2
+  echo "suggest-claude-md-hook: ログ: $LOG_FILE" >&2
+  exit 0
+fi
+
+# プロジェクトのCLAUDE.mdを特定
+CLAUDE_MD_PATH=""
+if [ -f "$CWD/.claude/CLAUDE.md" ]; then
+  CLAUDE_MD_PATH="$CWD/.claude/CLAUDE.md"
+elif [ -f "$CWD/CLAUDE.md" ]; then
+  CLAUDE_MD_PATH="$CWD/CLAUDE.md"
+fi
+
+if [ -z "$CLAUDE_MD_PATH" ]; then
+  echo "suggest-claude-md-hook: CLAUDE.mdが見つかりません ($CWD)。ログのみ保存します。" >&2
+  echo "suggest-claude-md-hook: ログ: $LOG_FILE" >&2
+  exit 0
+fi
+
+# 現在の日時
+SUGGESTION_TIMESTAMP=$(date +"%Y-%m-%d %H:%M")
+
+# CLAUDE.mdに保留セクションを追記
+# 既にPENDING_SUGGESTIONS セクションがあるかチェック
+if grep -q '<!-- PENDING_SUGGESTIONS_START -->' "$CLAUDE_MD_PATH"; then
+  # 既存セクションの END タグの直前に新しい提案を追加
+  END_LINE=$(grep -n '<!-- PENDING_SUGGESTIONS_END -->' "$CLAUDE_MD_PATH" | head -1 | cut -d: -f1)
+  {
+    head -n $((END_LINE - 1)) "$CLAUDE_MD_PATH"
+    cat <<SUGGESTION_EOF
+
+### 提案 ($SUGGESTION_TIMESTAMP)
+
+$PROPOSED_CONTENT
+
+**$REASON**
+
+SUGGESTION_EOF
+    tail -n +$END_LINE "$CLAUDE_MD_PATH"
+  } > "${CLAUDE_MD_PATH}.tmp" && mv "${CLAUDE_MD_PATH}.tmp" "$CLAUDE_MD_PATH"
+else
+  # 新規セクションを末尾に追加
+  cat >> "$CLAUDE_MD_PATH" <<SUGGESTION_EOF
+
+<!-- PENDING_SUGGESTIONS_START -->
+## Pending Suggestions (要レビュー)
+
+> 以下はsuggest-claude-md hookによる自動提案です。
+> 適用する場合は内容を確認して「適用して」、不要な場合は「削除して」と指示してください。
+
+### 提案 ($SUGGESTION_TIMESTAMP)
+
+$PROPOSED_CONTENT
+
+**$REASON**
+
+<!-- PENDING_SUGGESTIONS_END -->
+SUGGESTION_EOF
+fi
+
+echo "suggest-claude-md-hook: 提案をCLAUDE.mdに追記しました: $CLAUDE_MD_PATH" >&2
+echo "suggest-claude-md-hook: ログ: $LOG_FILE" >&2

@@ -71,3 +71,11 @@ codex exec resume --last -m {model} "The document was updated. Review it again. 
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
+
+## Pending Suggestions の処理
+
+セッション開始時、作業中のプロジェクトの CLAUDE.md に `<!-- PENDING_SUGGESTIONS_START -->` セクションが存在する場合:
+1. ユーザーに提案内容を要約して提示する
+2. 適用するか確認する
+3. 適用する場合: 提案内容をCLAUDE.mdの適切なセクションに統合し、Pendingセクションを削除
+4. 不要な場合: Pendingセクションを削除
