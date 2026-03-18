@@ -18,6 +18,15 @@
             "command": "bash -lc 'input=$(cat); file_path=$(printf %s \"$input\" | jq -r '\"'\"'.tool_input.file_path // empty'\"'\"'); case \"$file_path\" in *.py|*.pyi) ;; *) exit 0 ;; esac; [ -f \"$file_path\" ] || exit 0; run_and_capture(){ local output; if output=$(\"$@\" 2>&1); then printf %s \"$output\"; return 0; fi; printf %s \"$output\"; return 1; }; messages=\"\"; ruff_check_output=$(run_and_capture uvx -q --no-progress ruff check --fix --quiet \"$file_path\"); ruff_check_status=$?; if [ -n \"$ruff_check_output\" ] || [ $ruff_check_status -ne 0 ]; then messages=\"${messages}ruff check --fix:\\n$ruff_check_output\\n\\n\"; fi; ruff_format_output=$(run_and_capture uvx -q --no-progress ruff format --quiet \"$file_path\"); ruff_format_status=$?; if [ -n \"$ruff_format_output\" ] || [ $ruff_format_status -ne 0 ]; then messages=\"${messages}ruff format:\\n$ruff_format_output\\n\\n\"; fi; ty_output=$(run_and_capture uvx -q --no-progress ty check --output-format concise --no-progress \"$file_path\"); ty_status=$?; if [ \"$ty_output\" = \"All checks passed!\" ]; then ty_output=\"\"; fi; if [ -n \"$ty_output\" ] || [ $ty_status -ne 0 ]; then messages=\"${messages}ty check:\\n$ty_output\\n\"; fi; [ -z \"$messages\" ] && exit 0; jq -Rn --arg message \"$messages\" '\"'\"'{hookSpecificOutput:{hookEventName:\"PostToolUse\",additionalContext:(\"Python quality hook result for the edited file.\\n\"+$message)}}'\"'\"''"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/bin/codex-review-plan-hook.sh"
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -25,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bin/suggest-claude-md-hook.sh"
+            "command": "\"$HOME\"/.claude/bin/suggest-claude-md-hook.sh"
           }
         ]
       }
@@ -35,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bin/suggest-claude-md-hook.sh"
+            "command": "\"$HOME\"/.claude/bin/suggest-claude-md-hook.sh"
           }
         ]
       }
