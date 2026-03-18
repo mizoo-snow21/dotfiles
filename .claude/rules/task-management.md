@@ -1,6 +1,6 @@
 ---
-alwaysApply: true
- description: Plan-first task management workflow for non-trivial work
+paths:
+  - "**/*"
 ---
 
 # Task Management
