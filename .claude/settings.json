@@ -28,26 +28,6 @@
           }
         ]
       }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME\"/.claude/bin/suggest-claude-md-hook.sh"
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME\"/.claude/bin/suggest-claude-md-hook.sh"
-          }
-        ]
-      }
     ]
   },
   "extraKnownMarketplaces": {
@@ -61,5 +41,9 @@
   "effortLevel": "high",
   "enabledPlugins": {
     "code-review@claude-code-plugins": true
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/bin/statusline.py"
   }
 }
