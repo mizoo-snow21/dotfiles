@@ -17,16 +17,18 @@ Personal dotfiles for macOS development environment.
 ### Quick Setup (New Machine)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/dotfiles.git ~/dotfiles
+git clone https://github.com/mizoo-snow21/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 ./install.sh
 ```
+
+`install.sh` first installs Homebrew and the `Brewfile` packages, then links the shell dotfiles. This avoids first-run errors on a fresh Mac before `brew` or `mise` exist.
 
 ### Manual Installation
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/dotfiles.git ~/dotfiles
+   git clone https://github.com/mizoo-snow21/dotfiles.git ~/dotfiles
    ```
 
 2. Run the installation script:
@@ -38,17 +40,18 @@ cd ~/dotfiles
 
 3. Restart your shell or run:
    ```bash
+   source ~/.zprofile
    source ~/.zshrc
    ```
 
 ## What the Installation Does
 
 - **Backup Protection**: Creates backups of your existing dotfiles in `~/.dotfiles_backup`
-- **Dotfiles Setup**: Creates symbolic links from your home directory to the dotfiles in this repo
-- **Cursor Configuration**: Manages Cursor IDE settings, extensions, and custom commands
 - **Homebrew Management**: Installs Homebrew (if not present) and all packages from `Brewfile`
+- **Dotfiles Setup**: Creates symbolic links from your home directory to the dotfiles in this repo after Homebrew is ready
+- **Cursor Configuration**: Manages Cursor IDE settings, extensions, and custom commands
 - **Git Configuration**: Configures Git if not already set up
-- **Development Tools**: Sets up mise for managing multiple language versions
+- **Development Tools**: Sets up mise for managing multiple language versions without requiring it before installation
 
 ## Features
 
@@ -230,5 +233,5 @@ Your original dotfiles are automatically backed up to `~/.dotfiles_backup` durin
 
 - macOS
 - Git
-- Homebrew (installed automatically via .zprofile)
+- Command Line Tools for Git/Homebrew installation
 - Zsh (default shell on modern macOS)

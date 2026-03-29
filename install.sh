@@ -6,6 +6,14 @@ set -e
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="$HOME/.dotfiles_backup"
 
+set_brew_shellenv() {
+    if [[ -x "/opt/homebrew/bin/brew" ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -x "/usr/local/bin/brew" ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+}
+
 echo "🚀 Starting dotfiles installation..."
 echo "Dotfiles directory: $DOTFILES_DIR"
 
@@ -42,43 +50,20 @@ backup_and_link() {
     echo "🔗 Created symlink: $target -> $source"
 }
 
-# Install dotfiles
-echo "📝 Installing dotfiles..."
-
-backup_and_link "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
-backup_and_link "$DOTFILES_DIR/.zprofile" "$HOME/.zprofile"
-backup_and_link "$DOTFILES_DIR/.config/mise" "$HOME/.config/mise"
-backup_and_link "$DOTFILES_DIR/.config/ghostty" "$HOME/.config/ghostty"
-backup_and_link "$DOTFILES_DIR/.config/zellij" "$HOME/.config/zellij"
-
-# Cursor configuration
-backup_and_link "$DOTFILES_DIR/.cursor" "$HOME/.cursor"
-
-# Claude Code configuration
-backup_and_link "$DOTFILES_DIR/.claude" "$HOME/.claude"
-
-echo "✅ Dotfiles installation completed!"
-
 # ==============================================================================
 # Homebrew Setup
 # ==============================================================================
 
-echo ""
 echo "🍺 Setting up Homebrew..."
 
 # Check if Homebrew is installed
 if ! command -v brew &> /dev/null; then
     echo "📥 Homebrew not found. Installing Homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    
-    # Add Homebrew to PATH for this session
-    if [[ -f "/opt/homebrew/bin/brew" ]]; then
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-    elif [[ -f "/usr/local/bin/brew" ]]; then
-        eval "$(/usr/local/bin/brew shellenv)"
-    fi
+    set_brew_shellenv
 else
     echo "✅ Homebrew is already installed"
+    set_brew_shellenv
 fi
 
 # Install packages from Brewfile
@@ -90,6 +75,23 @@ if [[ -f "$DOTFILES_DIR/Brewfile" ]]; then
 else
     echo "⚠️  No Brewfile found. Skipping package installation."
 fi
+
+# ==============================================================================
+# Dotfiles Setup
+# ==============================================================================
+
+echo ""
+echo "📝 Installing dotfiles..."
+
+backup_and_link "$DOTFILES_DIR/.zprofile" "$HOME/.zprofile"
+backup_and_link "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
+backup_and_link "$DOTFILES_DIR/.config/mise" "$HOME/.config/mise"
+backup_and_link "$DOTFILES_DIR/.config/ghostty" "$HOME/.config/ghostty"
+backup_and_link "$DOTFILES_DIR/.config/zellij" "$HOME/.config/zellij"
+backup_and_link "$DOTFILES_DIR/.cursor" "$HOME/.cursor"
+backup_and_link "$DOTFILES_DIR/.claude" "$HOME/.claude"
+
+echo "✅ Dotfiles installation completed!"
 
 # ==============================================================================
 # Git Configuration
@@ -152,4 +154,4 @@ echo "  • Homebrew packages from Brewfile"
 echo "  • Git configuration"
 echo "  • Claude Code plugins (if selected)"
 echo ""
-echo "🔄 Please restart your shell or run: source ~/.zshrc"
+echo "🔄 Please restart your shell or run: source ~/.zprofile && source ~/.zshrc"
