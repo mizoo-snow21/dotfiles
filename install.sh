@@ -70,7 +70,7 @@ fi
 if [[ -f "$DOTFILES_DIR/Brewfile" ]]; then
     echo "📦 Installing packages from Brewfile..."
     cd "$DOTFILES_DIR"
-    brew bundle install --no-lock
+    brew bundle install
     echo "✅ Homebrew packages installation completed!"
 else
     echo "⚠️  No Brewfile found. Skipping package installation."
