@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
+# PostToolUse: Write = 新規作成、Edit = 更新。それ以外のツールや .md 以外は無視。
 set -euo pipefail
 
 INPUT=$(cat)
 FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty')
+TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
+case "$TOOL_NAME" in
+  Write|Edit) ;;
+  *) exit 0 ;;
+esac
 
 command -v codex >/dev/null 2>&1 || exit 0
 [ -n "$FILE_PATH" ] || exit 0
 
-BASENAME=$(basename "$FILE_PATH")
-case "$BASENAME" in
-  *[Tt][Oo][Dd][Oo]*.md | *[Pp][Ll][Aa][Nn]*.md | *[Ss][Pp][Ee][Cc]*.md) ;;
+_lc=$(printf '%s' "$FILE_PATH" | tr '[:upper:]' '[:lower:]')
+case "$_lc" in
+  *.md) ;;
   *) exit 0 ;;
 esac
 [ -f "$FILE_PATH" ] || exit 0
