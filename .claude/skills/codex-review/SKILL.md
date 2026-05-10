@@ -1,11 +1,11 @@
 ---
 name: codex-review
-description: Run a codex (GPT-5.4) code review on the current PR or staged changes. Use when the user wants an external AI review before merging. Iterates until no critical findings remain.
+description: Run a codex (GPT-5.5) code review on the current PR or staged changes. Use when the user wants an external AI review before merging. Iterates until no critical findings remain.
 ---
 
 # Codex Review
 
-Run a GPT-5.4 code review via `codex exec` on the current PR or staged changes, then iterate fixes until clean.
+Run a GPT-5.5 code review via `codex exec` on the current PR or staged changes, then iterate fixes until clean.
 
 ## Workflow
 
@@ -16,7 +16,7 @@ Run a GPT-5.4 code review via `codex exec` on the current PR or staged changes, 
 
 2. **Initial review**: Run codex with the gathered files.
    ```bash
-   codex exec -m gpt-5.4 "Review this code. Do not nitpick. Only point out critical issues (bugs, data loss, incorrect logic, missing error handling that would cause crashes, security issues).
+   codex exec -m gpt-5.5 "Review this code. Do not nitpick. Only point out critical issues (bugs, data loss, incorrect logic, missing error handling that would cause crashes, security issues).
 
    Focus areas:
    - Correctness of core logic
@@ -37,7 +37,7 @@ Run a GPT-5.4 code review via `codex exec` on the current PR or staged changes, 
 
 4. **Re-review**: After fixes, resume the codex session:
    ```bash
-   codex exec resume --last -m gpt-5.4 "The code was updated. Changes:
+   codex exec resume --last -m gpt-5.5 "The code was updated. Changes:
    1. Finding #N: <what was fixed or why it's a false positive>
 
    Review the updated code. Do not nitpick. Only point out critical issues:
@@ -53,20 +53,21 @@ Run a GPT-5.4 code review via `codex exec` on the current PR or staged changes, 
 
 Use models in this priority order. If a `codex exec` call fails with a rate limit error (429, "rate limit", "too many requests", etc.), retry with the next model down:
 
-1. `gpt-5.4`
-2. `gpt-5.3-codex`
-3. `gpt-5.2-codex`
-4. `gpt-5.2`
-5. `gpt-5.1-codex`
-6. `gpt-5.1`
-7. `gpt-5-codex`
-8. `gpt-5`
+1. `gpt-5.5`
+2. `gpt-5.4`
+3. `gpt-5.3-codex`
+4. `gpt-5.2-codex`
+5. `gpt-5.2`
+6. `gpt-5.1-codex`
+7. `gpt-5.1`
+8. `gpt-5-codex`
+9. `gpt-5`
 
 When falling back, start a **new session** (do not use `resume --last` since the session was on a different model). Mention the fallback to the user.
 
 ## Rules
 
-- Default to `-m gpt-5.4` for reviews. Fall back per the model priority above on rate limit.
+- Default to `-m gpt-5.5` for reviews. Fall back per the model priority above on rate limit.
 - Always use `resume --last` for follow-up reviews to preserve session context (same model only).
 - Include the instruction "Do not nitpick. Only point out critical issues" in every review prompt.
 - When a finding is a false positive, explain why clearly in the resume prompt so codex doesn't re-raise it.
