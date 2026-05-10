@@ -48,6 +48,13 @@
       }
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/bin/statusline.py"
+  },
+  "enabledPlugins": {
+    "code-review@claude-code-plugins": true
+  },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
       "source": {
@@ -57,11 +64,5 @@
     }
   },
   "effortLevel": "high",
-  "enabledPlugins": {
-    "code-review@claude-code-plugins": true
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude/bin/statusline.py"
-  }
+  "theme": "dark-daltonized"
 }
