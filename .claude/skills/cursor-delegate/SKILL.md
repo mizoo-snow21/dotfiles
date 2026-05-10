@@ -84,7 +84,7 @@ cursor agent -p --trust \
   "<prompt>"
 ```
 
-- Default to `--model composer-2-fast` unless user specifies otherwise (use `composer-2` for Standard / lower $/M)
+- Default to `--model composer-2-fast` unless user specifies otherwise
 - Do NOT use `--yolo`. Use default approval-based execution
 
 ### 4. Claude Code verifies
