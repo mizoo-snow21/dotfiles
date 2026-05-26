@@ -80,11 +80,11 @@ Implement using TDD:
 ```bash
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model composer-2-fast \
+  --model composer-2.5-fast \
   "<prompt>"
 ```
 
-- Default to `--model composer-2-fast` unless user specifies otherwise
+- Default to `--model composer-2.5-fast` unless user specifies otherwise
 - Do NOT use `--yolo`. Use default approval-based execution
 
 ### 4. Claude Code verifies
@@ -147,6 +147,6 @@ cursor agent ls
 | `-p` | Headless output (required for CLI execution) |
 | `--trust` | Trust workspace (required for headless mode) |
 | `--workspace <path>` | Working directory |
-| `--model <model>` | Model selection (default: composer-2-fast) |
+| `--model <model>` | Model selection (default: composer-2.5-fast) |
 | `--continue` | Continue previous session |
 | `--resume <chatId>` | Resume specific session |
