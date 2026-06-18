@@ -30,6 +30,15 @@ else
     echo "✅ Added claude-code-plugins marketplace"
 fi
 
+# ponytail マーケットプレース
+if claude plugin marketplace list 2>/dev/null | grep -q "ponytail"; then
+    echo "✅ ponytail marketplace already configured"
+else
+    echo "📥 Adding ponytail marketplace..."
+    claude plugin marketplace add DietrichGebert/ponytail
+    echo "✅ Added ponytail marketplace"
+fi
+
 # ==============================================================================
 # Plugins
 # ==============================================================================
@@ -44,6 +53,15 @@ else
     echo "📥 Installing code-review..."
     claude plugin install code-review
     echo "✅ Installed code-review"
+fi
+
+# ponytail プラグイン
+if claude plugin list 2>/dev/null | grep -q "ponytail@ponytail"; then
+    echo "✅ ponytail already installed"
+else
+    echo "📥 Installing ponytail..."
+    claude plugin install ponytail
+    echo "✅ Installed ponytail"
 fi
 
 # 今後プラグインを追加する場合はここに追記:
