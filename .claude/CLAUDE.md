@@ -133,6 +133,7 @@ codex exec resume --last "The document was updated. Review it again. Do not nitp
   2. Following the loaded template, dispatch a code reviewer subagent via `Agent` tool (`subagent_type: "superpowers:code-reviewer"`)
   3. Provide: BASE_SHA, HEAD_SHA, what was implemented, plan reference
   4. Must pass ✅ (or "With fixes") before committing
+  5. **If the task touches UI/frontend**: both superpowers reviewer templates are read-only, diff-based (they explicitly avoid re-executing tests the implementer already ran), so they cannot catch bugs that only surface by actually running the UI. For UI/frontend tasks, also drive the change in a real browser (e.g. via `web-devloop-tester`) before marking Quality Review passed — do not rely on diff-reading alone. Logic-only tasks keep the standard read-only review.
 - **Both stages are separate subagents** — never combine, never do inline, never skip
 - **Order is strict** — Spec Review first, Quality Review second. Never reverse.
 - **Always invoke the Skill tool first** — load the template before dispatching the Agent subagent
