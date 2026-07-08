@@ -104,7 +104,7 @@ codex exec resume --last "The document was updated. Review it again. Do not nitp
 - Only merge to main after all reviews pass and `finishing-a-development-branch` is complete
 
 ### Cursor Implementation Rules (Non-Negotiable)
-- **Model: always `composer-2.5`** — invoke with `cursor-agent --model composer-2.5`. (Note: `composer-2.5-fast` is not a valid model ID in the current cursor-agent CLI; use `composer-2.5`.) CLI default is set in `~/.cursor/cli-config.json`, but pass `--model` explicitly in scripts and prompts for reproducibility. Never pass Codex models (e.g. `gpt-5.3-codex-high`) — Codex is reviewer-side only (see Agent Roles)
+- **Model: default `composer-2.5`** — invoke with `cursor agent --model composer-2.5`. Pass `--model` explicitly in scripts and prompts for reproducibility. Never pass Codex models (e.g. `gpt-5.3-codex-high`) — Codex is reviewer-side only (see Agent Roles)
 - **All implementation MUST go through Cursor** — Claude Code subagents must NOT write implementation code. Claude Code is for planning, review, and research only
 - **TDD stays inside Cursor** — never split tests and implementation into separate tasks. Before each Cursor dispatch, load `superpowers:test-driven-development` via the Skill tool and **embed its content** into the Cursor prompt (not just the 5-line summary below). The 5-line block is a minimum fallback, not a substitute:
   ```
@@ -118,8 +118,8 @@ codex exec resume --last "The document was updated. Review it again. Do not nitp
   ```
 - **Fresh Cursor session per task** — never implement multiple tasks in a single Cursor invocation
 - **Route review fixes back to Cursor** — when two-stage review finds issues, don't fix them in Claude Code. Send fixes to Cursor via `--continue` and re-review
-- **Pass Cursor prompts inline (do NOT write to .md files)** — dispatch via heredoc directly. The pattern of `Write` to `/tmp/cursor-*.md` then `cat | cursor-agent` is forbidden (slows down execution). Codex auto-review is reserved for spec / plan documents only, not Cursor prompts. Inline prompts must still embed all mandatory CLAUDE.md requirements (reference files, TDD block, `--model composer-2.5`).
-  - Example: `cursor-agent --model composer-2.5 --print --output-format text "$(cat <<'EOF' ...prompt body... EOF)"`
+- **Pass Cursor prompts inline (do NOT write to .md files)** — dispatch via heredoc directly. The pattern of `Write` to `/tmp/cursor-*.md` then `cat | cursor-agent` is forbidden (slows down execution). Codex auto-review is reserved for spec / plan documents only, not Cursor prompts. Inline prompts must still embed all mandatory CLAUDE.md requirements (reference files, TDD block, `--model composer-2.5-fast`).
+  - Example: `cursor agent -p --trust --model composer-2.5-fast "$(cat <<'EOF' ...prompt body... EOF)"`
 
 ### Two-Stage Review (superpowers skills — MANDATORY per task)
 - **Run per task** — never batch reviews after all tasks are done
@@ -140,3 +140,15 @@ codex exec resume --last "The document was updated. Review it again. Do not nitp
 ### No-Skip Rule
 - **"I'm in a hurry", "user is sleeping", "it's a simple task" are NOT valid reasons to skip any step**
 - If you cannot follow the workflow, tell the user BEFORE starting — never silently skip
+
+## Handling Pending Suggestions
+
+At the start of a session, if the working project's CLAUDE.md contains a `<!-- PENDING_SUGGESTIONS_START -->` section:
+1. Summarize and present the suggestions to the user
+2. Ask the user whether to apply them
+3. If accepted: merge the suggestions into the appropriate section of CLAUDE.md and remove the Pending section
+4. If not needed: remove the Pending section
+
+## Execution / Visibility
+
+- **No background execution**: Do not use Bash with `run_in_background` or async Agent/Workflow — they hide work status. Run long-running processes in the foreground and show progress incrementally.

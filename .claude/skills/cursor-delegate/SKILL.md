@@ -1,6 +1,6 @@
 ---
 name: cursor-delegate
-description: Delegate implementation tasks to Cursor CLI (Composer 2) in headless mode. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
+description: Delegate implementation tasks to Cursor CLI (Composer 2.5) in headless mode. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
 ---
 
 # Cursor Delegate
@@ -122,8 +122,10 @@ Follow the project's review workflow (e.g., spec review + quality review via sub
 
 ```bash
 # Follow-up instructions (fixes, etc.)
+# NOTE: --continue does NOT inherit the session model (CLI default wins) — always pass --model explicitly
 cursor agent -p --trust \
   --workspace "<project-dir>" \
+  --model composer-2.5 \
   --continue \
   "<follow-up instructions>"
 

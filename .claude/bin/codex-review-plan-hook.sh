@@ -74,11 +74,11 @@ run_review() {
 
   for model in "${MODELS[@]}"; do
     if [ "$mode" = "resume" ]; then
-      if codex exec resume -m "$model" --json -o "$OUTPUT_FILE" "$SESSION_ID" "$prompt" > "$JSONL_FILE" 2>/dev/null && normalize_review_output; then
+      if codex exec resume --skip-git-repo-check -m "$model" --json -o "$OUTPUT_FILE" "$SESSION_ID" "$prompt" > "$JSONL_FILE" 2>/dev/null && normalize_review_output; then
         USED_MODEL="$model"
         return 0
       fi
-    elif codex exec -m "$model" --json --output-schema "$SCHEMA_FILE" -o "$OUTPUT_FILE" "$prompt" > "$JSONL_FILE" 2>/dev/null && normalize_review_output; then
+    elif codex exec --skip-git-repo-check -m "$model" --json --output-schema "$SCHEMA_FILE" -o "$OUTPUT_FILE" "$prompt" > "$JSONL_FILE" 2>/dev/null && normalize_review_output; then
       USED_MODEL="$model"
       return 0
     fi
