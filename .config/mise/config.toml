@@ -1,5 +1,8 @@
 [tools]
+aws-cli = "latest"
+azure-cli = "latest"
 gcloud = "latest"
+go = "latest"
 node = "latest"
 "npm:claude-code-monitor" = "latest"
 python = "latest"

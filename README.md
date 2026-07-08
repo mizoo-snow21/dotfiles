@@ -22,7 +22,7 @@ cd ~/dotfiles
 ./install.sh
 ```
 
-`install.sh` first installs Homebrew and the `Brewfile` packages, then links the shell dotfiles. This avoids first-run errors on a fresh Mac before `brew` or `mise` exist.
+`install.sh` first installs Homebrew and the `Brewfile` packages, then links the shell dotfiles and installs tools from mise. This avoids first-run errors on a fresh Mac before `brew` or `mise` exist.
 
 ### Manual Installation
 
@@ -49,6 +49,7 @@ cd ~/dotfiles
 - **Backup Protection**: Creates backups of your existing dotfiles in `~/.dotfiles_backup`
 - **Homebrew Management**: Installs Homebrew (if not present) and all packages from `Brewfile`
 - **Dotfiles Setup**: Creates symbolic links from your home directory to the dotfiles in this repo after Homebrew is ready
+- **mise Tools**: Installs language runtimes and cloud CLIs from `.config/mise/config.toml`
 - **Cursor Configuration**: Manages Cursor IDE settings, extensions, and custom commands
 - **Git Configuration**: Configures Git if not already set up
 - **Development Tools**: Sets up mise for managing multiple language versions without requiring it before installation
@@ -64,6 +65,9 @@ cd ~/dotfiles
 ### Development Tools
 - mise configuration for managing multiple language versions
 - Homebrew package management setup
+- Cloud CLIs managed by mise: AWS CLI, Azure CLI, and Google Cloud CLI
+- Language/runtime tools managed by mise: Python, Node.js, Go, and uv
+- Docker Desktop managed by Homebrew cask
 
 ### Cursor IDE Configuration
 - IDE settings and preferences
@@ -84,7 +88,7 @@ cd ~/dotfiles
 
 ### Package Management
 - **Brewfile**: Automatically installs all your CLI tools, GUI apps, and utilities
-- **Current packages**: gh, mise, yarn, zsh enhancements, and more
+- **Current packages**: gh, mise, Docker Desktop, yarn, zsh enhancements, and more
 - **Easy expansion**: Add new packages by editing the Brewfile
 
 ## Managing Homebrew Packages

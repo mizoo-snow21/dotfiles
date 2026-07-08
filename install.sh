@@ -94,6 +94,19 @@ backup_and_link "$DOTFILES_DIR/.claude" "$HOME/.claude"
 echo "✅ Dotfiles installation completed!"
 
 # ==============================================================================
+# mise Tools Setup
+# ==============================================================================
+
+echo ""
+echo "🧰 Installing mise-managed tools..."
+if command -v mise &> /dev/null; then
+    mise install
+    echo "✅ mise-managed tools installation completed!"
+else
+    echo "⚠️  mise not found. Skipping mise tool installation."
+fi
+
+# ==============================================================================
 # Git Configuration
 # ==============================================================================
 
