@@ -35,7 +35,7 @@ if [ -n "$CLAUDE_MD" ]; then
   REF_ARG=" (ref: $CLAUDE_MD)"
 fi
 
-MODELS=("gpt-5.5" "gpt-5.4" "gpt-5.3-codex" "gpt-5.2-codex" "gpt-5.2" "gpt-5.1-codex-max")
+MODELS=("gpt-5.6-sol" "gpt-5.5" "gpt-5.4" "gpt-5.3-codex" "gpt-5.2-codex" "gpt-5.2" "gpt-5.1-codex-max")
 
 STATE_DIR="${TMPDIR:-/tmp}/codex-review-plan-state"
 mkdir -p "$STATE_DIR"
