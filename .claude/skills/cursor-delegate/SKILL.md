@@ -1,6 +1,6 @@
 ---
 name: cursor-delegate
-description: Delegate implementation tasks to Cursor CLI (Composer 2.5) in headless mode. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
+description: Delegate implementation tasks to Cursor CLI (Grok 4.5 Fast) in headless mode. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
 ---
 
 # Cursor Delegate
@@ -80,11 +80,11 @@ Implement using TDD:
 ```bash
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model composer-2.5-fast \
+  --model grok-4.5-fast-high \
   "<prompt>"
 ```
 
-- Default to `--model composer-2.5-fast` unless user specifies otherwise
+- Default to `--model grok-4.5-fast-high` unless user specifies otherwise
 - Do NOT use `--yolo`. Use default approval-based execution
 
 ### 4. Claude Code verifies
@@ -125,7 +125,7 @@ Follow the project's review workflow (e.g., spec review + quality review via sub
 # NOTE: --continue does NOT inherit the session model (CLI default wins) — always pass --model explicitly
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model composer-2.5 \
+  --model grok-4.5-fast-high \
   --continue \
   "<follow-up instructions>"
 
@@ -149,6 +149,6 @@ cursor agent ls
 | `-p` | Headless output (required for CLI execution) |
 | `--trust` | Trust workspace (required for headless mode) |
 | `--workspace <path>` | Working directory |
-| `--model <model>` | Model selection (default: composer-2.5-fast) |
+| `--model <model>` | Model selection (default: grok-4.5-fast-high) |
 | `--continue` | Continue previous session |
 | `--resume <chatId>` | Resume specific session |

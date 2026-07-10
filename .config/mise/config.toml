@@ -6,6 +6,7 @@ go = "latest"
 node = "latest"
 "npm:claude-code-monitor" = "latest"
 python = "latest"
+terraform = "latest"
 uv = "latest"
 
 [settings]
