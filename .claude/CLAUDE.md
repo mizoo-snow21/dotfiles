@@ -27,18 +27,20 @@
 ### 3. Plan / Todo Review Loop
 - Before showing any implementation plan, spec, or todo document to the user, review it with codex
 - Apply this to plan-style and todo-style docs in general, not just a single filename
-- Use GPT-5.5  for these reviews
+- Use GPT-5.6 Sol (`-m gpt-5.6-sol`) for these reviews
 - Explicitly tell codex to ignore nitpicks and only call out critical issues
 - Update the document and re-run the review until codex has no findings left
 - If you are updating an existing review, resume the latest codex session so the prior context is preserved
 
 ```bash
 # Initial review
-codex exec "Review this document. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})"
+codex exec "Review this document. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
 
 # Follow-up review after updates
-codex exec resume --last "The document was updated. Review it again. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})"
+codex exec resume --last "The document was updated. Review it again. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
 ```
+
+- **`< /dev/null` は必須**: stdin を閉じないと、バックグラウンド実行時に codex が stdin のパイプ待ちで永久にハングする（2026-07-09 実測: バックグラウンド化で 100% ハング・フォアグラウンド再実行で毎回 1〜3 分完了）。`codex exec` を呼ぶ**すべて**のコマンドに付けること
 
 ### 4. Verification Before Done
 - Never mark a task complete without proving it works
@@ -78,22 +80,21 @@ codex exec resume --last "The document was updated. Review it again. Do not nitp
 
 2. Per task (repeat for each task):
    ├─ **Skill load (mandatory, at task start)**
-   │   ├─ Skill("superpowers:subagent-driven-development") — implementer / spec-reviewer / code-quality-reviewer templates
-   │   ├─ Skill("superpowers:test-driven-development") — TDD body to embed into Cursor prompt
-   │   └─ Skill("superpowers:requesting-code-review") — code-reviewer template
+   │   ├─ Skill("superpowers:subagent-driven-development") — implementer / task-reviewer templates
+   │   └─ Skill("superpowers:test-driven-development") — TDD body to embed into Cursor prompt
    │
    ├─ Implement (Cursor only — mandatory)
    │   ├─ TDD: write test → confirm failure → implement → confirm pass
    │   │   (Cursor prompt MUST embed the content of superpowers:test-driven-development, not just the 5-line summary)
    │   └─ 1 task = 1 fresh Cursor session (no batching)
    │
-   ├─ Spec Review (superpowers:subagent-driven-development spec-reviewer-prompt)
-   │   └─ ❌ → send fixes back to Cursor → re-review
-   │
-   └─ Quality Review (superpowers:requesting-code-review)
+   └─ Task Review (superpowers:subagent-driven-development task-reviewer-prompt —
+      spec compliance + code quality を1レビューで判定。superpowers 6.x で spec-reviewer が統合された)
        └─ ❌ → send fixes back to Cursor → re-review
 
-3. After all tasks
+3. After all tasks (per branch, before PR)
+   ├─ Branch Review (superpowers:requesting-code-review code-reviewer — whole-branch merge review を1回)
+   │   └─ ❌ → send fixes back to Cursor → re-review
    └─ superpowers:finishing-a-development-branch
 ```
 
@@ -104,7 +105,7 @@ codex exec resume --last "The document was updated. Review it again. Do not nitp
 - Only merge to main after all reviews pass and `finishing-a-development-branch` is complete
 
 ### Cursor Implementation Rules (Non-Negotiable)
-- **Model: default `composer-2.5`** — invoke with `cursor agent --model composer-2.5`. Pass `--model` explicitly in scripts and prompts for reproducibility. Never pass Codex models (e.g. `gpt-5.3-codex-high`) — Codex is reviewer-side only (see Agent Roles)
+- **Model: default `grok-4.5-fast-high`**（Cursor Grok 4.5 Medium Fast） — invoke with `cursor agent --model grok-4.5-fast-high`. Pass `--model` explicitly in scripts and prompts for reproducibility. Never pass Codex models (e.g. `gpt-5.3-codex-high`) — Codex is reviewer-side only (see Agent Roles)
 - **All implementation MUST go through Cursor** — Claude Code subagents must NOT write implementation code. Claude Code is for planning, review, and research only
 - **TDD stays inside Cursor** — never split tests and implementation into separate tasks. Before each Cursor dispatch, load `superpowers:test-driven-development` via the Skill tool and **embed its content** into the Cursor prompt (not just the 5-line summary below). The 5-line block is a minimum fallback, not a substitute:
   ```
@@ -118,25 +119,23 @@ codex exec resume --last "The document was updated. Review it again. Do not nitp
   ```
 - **Fresh Cursor session per task** — never implement multiple tasks in a single Cursor invocation
 - **Route review fixes back to Cursor** — when two-stage review finds issues, don't fix them in Claude Code. Send fixes to Cursor via `--continue` and re-review
-- **Pass Cursor prompts inline (do NOT write to .md files)** — dispatch via heredoc directly. The pattern of `Write` to `/tmp/cursor-*.md` then `cat | cursor-agent` is forbidden (slows down execution). Codex auto-review is reserved for spec / plan documents only, not Cursor prompts. Inline prompts must still embed all mandatory CLAUDE.md requirements (reference files, TDD block, `--model composer-2.5-fast`).
-  - Example: `cursor agent -p --trust --model composer-2.5-fast "$(cat <<'EOF' ...prompt body... EOF)"`
+- **Pass Cursor prompts inline (do NOT write to .md files)** — dispatch via heredoc directly. The pattern of `Write` to `/tmp/cursor-*.md` then `cat | cursor-agent` is forbidden (slows down execution). Codex auto-review is reserved for spec / plan documents only, not Cursor prompts. Inline prompts must still embed all mandatory CLAUDE.md requirements (reference files, TDD block, `--model grok-4.5-fast-high`).
+  - Example: `cursor agent -p --trust --model grok-4.5-fast-high "$(cat <<'EOF' ...prompt body... EOF)"`
 
-### Two-Stage Review (superpowers skills — MANDATORY per task)
-- **Run per task** — never batch reviews after all tasks are done
-- **Spec Review** (Stage 1):
-  1. Invoke `Skill` tool with `superpowers:subagent-driven-development` to load the spec-reviewer-prompt template
-  2. Following the loaded template, dispatch a spec reviewer subagent via `Agent` tool (`subagent_type: "general-purpose"`)
-  3. Provide: full spec requirements text, file paths to review, "Do Not Trust the Report" instructions
-  4. Must pass ✅ before proceeding to Stage 2
-- **Quality Review** (Stage 2):
+### Two-Stage Review (superpowers skills — MANDATORY。superpowers 6.x 構成)
+- **Stage 1: Task Review（タスクごとに1回）** — never batch after all tasks are done
+  1. Invoke `Skill` tool with `superpowers:subagent-driven-development` to load the **task-reviewer-prompt** template（6.x で spec-reviewer と code-quality-reviewer が統合された。spec compliance = Part 1 / code quality = Part 2 を同一レビューで判定）
+  2. Following the loaded template, dispatch a task reviewer subagent via `Agent` tool (`subagent_type: "general-purpose"`)
+  3. Provide: task brief / implementer report / diff package の3点 + "Do Not Trust the Report" instructions + タスク固有の named risks
+  4. Must pass ✅（Approved）before committing the task
+- **Stage 2: Branch Review（ブランチごとに1回・PR 前）**:
   1. Invoke `Skill` tool with `superpowers:requesting-code-review` to load the code-reviewer template
-  2. Following the loaded template, dispatch a code reviewer subagent via `Agent` tool (`subagent_type: "superpowers:code-reviewer"`)
-  3. Provide: BASE_SHA, HEAD_SHA, what was implemented, plan reference
-  4. Must pass ✅ (or "With fixes") before committing
+  2. Following the loaded template, dispatch a code reviewer subagent via `Agent` tool (`subagent_type: "general-purpose"`)
+  3. Provide: BASE_SHA, HEAD_SHA（ブランチ全体）, what was implemented, plan reference
+  4. Must pass ✅ (or "With fixes") before creating the PR
   5. **If the task touches UI/frontend**: both superpowers reviewer templates are read-only, diff-based (they explicitly avoid re-executing tests the implementer already ran), so they cannot catch bugs that only surface by actually running the UI. For UI/frontend tasks, also drive the change in a real browser (e.g. via `web-devloop-tester`) before marking Quality Review passed — do not rely on diff-reading alone. Logic-only tasks keep the standard read-only review.
 - **Both stages are separate subagents** — never combine, never do inline, never skip
-- **Order is strict** — Spec Review first, Quality Review second. Never reverse.
-- **Always invoke the Skill tool first** — load the template before dispatching the Agent subagent
+- **Always invoke the Skill tool first** — load the template before dispatching the Agent subagent（Skill ツールに未登録の場合はプラグインキャッシュのテンプレートファイルを直接 Read して従う）
 
 ### No-Skip Rule
 - **"I'm in a hurry", "user is sleeping", "it's a simple task" are NOT valid reasons to skip any step**
