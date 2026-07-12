@@ -17,6 +17,10 @@ fi
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
+# pnpm
+export PNPM_HOME="$HOME/Library/pnpm"
+export PATH="$PNPM_HOME:$PATH"
+
 if command -v mise >/dev/null 2>&1; then
   eval "$(mise activate zsh)"
 fi

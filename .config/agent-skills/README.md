@@ -17,8 +17,19 @@ cd ~/dotfiles
 
 ## スキルリスト管理
 
-`skills-list.txt`にインストールしたいスキルを記載してください。
-1行に1つのスキル（`owner/repo`形式）を記載します。
+`skills-list.txt` は手動編集しません。`scripts/sync-agent-skills-list.sh` が
+`~/.agents/.skill-lock.json`（実際にグローバルインストール済みのスキルの正）から自動生成します。
+
+スキルを追加/削除したら:
+```bash
+npx skills add <owner/repo>@<skill> -g -y   # または npx skills remove
+cd ~/dotfiles
+./scripts/sync-agent-skills-list.sh          # skills-list.txt と skill-lock.json を最新化
+git add .config/agent-skills && git commit -m "..."
+```
+
+`.config/agent-skills/skill-lock.json` は `~/.agents/.skill-lock.json` のコピー(参照用、
+インストール日時やハッシュなどの provenance を確認する用途)。
 
 ## 対応ツール
 

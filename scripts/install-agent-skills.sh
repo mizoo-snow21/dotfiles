@@ -27,30 +27,30 @@ fi
 
 # スキルリストを読み込んでインストール
 installed_count=0
-skipped_count=0
+failed_skills=()
 
 while IFS= read -r line || [[ -n "$line" ]]; do
     # コメント行と空行をスキップ
     if [[ "$line" =~ ^[[:space:]]*# ]] || [[ -z "${line// }" ]]; then
         continue
     fi
-    
-    # スキル名を取得（owner/repo形式）
+
+    # スキル名を取得（owner/repo または owner/repo@skill形式）
     skill_name=$(echo "$line" | sed 's/[[:space:]]*#.*$//' | xargs)
-    
+
     if [[ -z "$skill_name" ]]; then
         continue
     fi
-    
+
     echo ""
     echo "📦 Installing: $skill_name"
-    
-    if npx skills add "$skill_name" 2>/dev/null; then
+
+    if npx skills add "$skill_name" -g -y < /dev/null; then
         echo "✅ Installed: $skill_name"
-        ((installed_count++))
+        installed_count=$((installed_count + 1))
     else
-        echo "⚠️  Failed to install: $skill_name (may already be installed)"
-        ((skipped_count++))
+        echo "⚠️  Failed to install: $skill_name"
+        failed_skills+=("$skill_name")
     fi
 done < "$SKILLS_LIST"
 
@@ -77,6 +77,13 @@ else
 fi
 
 echo ""
+if [[ ${#failed_skills[@]} -gt 0 ]]; then
+    echo "❌ Agent skills installation finished with failures!"
+    echo "   Installed: $installed_count"
+    echo "   Failed:"
+    printf '     - %s\n' "${failed_skills[@]}"
+    exit 1
+fi
+
 echo "🎉 Agent skills installation completed!"
 echo "   Installed: $installed_count"
-echo "   Skipped/Failed: $skipped_count"

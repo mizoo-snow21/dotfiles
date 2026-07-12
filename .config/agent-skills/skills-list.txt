@@ -1,9 +1,16 @@
 # Agent Skills List
-# このファイルにはインストールするエージェントスキルのリストを記載します
-# インストール方法: npx skills add <owner/repo>
+# scripts/sync-agent-skills-list.sh により ~/.agents/.skill-lock.json から自動生成されます。
+# 手動編集しないこと。スキル追加/削除後にこのスクリプトを再実行してください。
 
-# 公式スキルコレクション
-vercel-labs/agent-skills
-
-# カスタムスキルを追加する場合は以下に記載
-# owner/custom-skill-name
+intellectronica/agent-skills@context7
+jgraph/drawio-mcp@drawio
+vercel-labs/skills@find-skills
+github/awesome-copilot@github-issues
+github/awesome-copilot@playwright-generate-test
+wshobson/agents@python-code-style
+wshobson/agents@python-design-patterns
+wshobson/agents@python-performance-optimization
+wshobson/agents@python-project-structure
+wshobson/agents@python-testing-patterns
+hashicorp/agent-skills@terraform-stacks
+hashicorp/agent-skills@terraform-test

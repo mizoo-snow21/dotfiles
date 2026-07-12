@@ -139,6 +139,38 @@ if [[ -f "$DOTFILES_DIR/scripts/setup-mcp.sh" ]]; then
 fi
 
 # ==============================================================================
+# Agent Skills Setup (Optional)
+# ==============================================================================
+
+echo ""
+if [[ -f "$DOTFILES_DIR/scripts/install-agent-skills.sh" ]]; then
+    echo "📚 Agent skills setup available"
+    read -p "Do you want to install agent skills now? (y/N): " setup_skills
+    if [[ "$setup_skills" =~ ^[Yy]$ ]]; then
+        bash "$DOTFILES_DIR/scripts/install-agent-skills.sh"
+    else
+        echo "⏭️  Skipping agent skills setup"
+        echo "   You can run it later with: ./scripts/install-agent-skills.sh"
+    fi
+fi
+
+# ==============================================================================
+# Claude Code MCP Setup (Optional)
+# ==============================================================================
+
+echo ""
+if [[ -f "$DOTFILES_DIR/scripts/setup-claude-code-mcp.sh" ]]; then
+    echo "🔧 Claude Code MCP server setup available"
+    read -p "Do you want to register Claude Code CLI MCP servers now? (y/N): " setup_cc_mcp
+    if [[ "$setup_cc_mcp" =~ ^[Yy]$ ]]; then
+        bash "$DOTFILES_DIR/scripts/setup-claude-code-mcp.sh"
+    else
+        echo "⏭️  Skipping Claude Code MCP setup"
+        echo "   You can run it later with: ./scripts/setup-claude-code-mcp.sh"
+    fi
+fi
+
+# ==============================================================================
 # Claude Code Plugins Setup
 # ==============================================================================
 
