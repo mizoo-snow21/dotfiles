@@ -136,7 +136,7 @@ codex exec resume --last "The document was updated. Review it again. Do not nitp
   5. **If the task touches UI/frontend**: both superpowers reviewer templates are read-only, diff-based (they explicitly avoid re-executing tests the implementer already ran), so they cannot catch bugs that only surface by actually running the UI. For UI/frontend tasks, also drive the change in a real browser (e.g. via `web-devloop-tester`) before marking Quality Review passed — do not rely on diff-reading alone. Logic-only tasks keep the standard read-only review.
 - **Both stages are separate subagents** — never combine, never do inline, never skip
 - **Always invoke the Skill tool first** — load the template before dispatching the Agent subagent（Skill ツールに未登録の場合はプラグインキャッシュのテンプレートファイルを直接 Read して従う）
-
+- **Reviewer model**: Task Review defaults to **sonnet** (the latest mid-tier model in the harness; when new models ship, reinterpret as "default = latest mid-tier"). Branch Review follows the superpowers default — the most capable available model, always specified explicitly in the dispatch
 ### No-Skip Rule
 - **"I'm in a hurry", "user is sleeping", "it's a simple task" are NOT valid reasons to skip any step**
 - If you cannot follow the workflow, tell the user BEFORE starting — never silently skip

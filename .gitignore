@@ -42,6 +42,16 @@ secrets/
 .claude/sessions/
 .claude/image-cache/
 .claude/mcp-needs-auth-cache.json
+.claude/chrome/
+.claude/daemon/
+.claude/jobs/
+.claude/.last-cleanup
+.claude/.last-update-result.json
+.claude/.ponytail-active
+.claude/.update.lock
+.claude/policy-limits.json
+.claude/remote-settings.json
+.claude/stats-cache.json
 .config/mcp/mcp.json.local
 .config/mcp/codex.config.toml.local
 Library/Application Support/Claude/claude_desktop_config.json

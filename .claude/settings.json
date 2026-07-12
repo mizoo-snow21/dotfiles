@@ -1,13 +1,15 @@
 {
   "env": {
     "CLAUDE_CODE_MONITOR_GHOSTTY_ASKED": "1",
-    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"
+    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5"
   },
   "permissions": {
     "allow": [
       "Bash(*)"
     ]
   },
+  "model": "sonnet",
   "hooks": {
     "PostToolUse": [
       {
@@ -45,6 +47,62 @@
             "command": "~/.claude/bin/codex-review-plan-hook.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/gitnexus/gitnexus-hook.cjs",
+            "timeout": 10,
+            "statusMessage": "Checking GitNexus index freshness..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Grep|Glob|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/gitnexus/gitnexus-hook.cjs",
+            "timeout": 10,
+            "statusMessage": "Enriching with GitNexus graph context..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/bin/codex-foreground-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Enforcing codex foreground rule..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sid=$(jq -r '.session_id // \"default\"'); caffeinate -dimsu >/dev/null 2>&1 </dev/null & echo $! > \"/tmp/claude-caffeinate-$sid.pid\"",
+            "statusMessage": "Preventing Mac sleep for this session..."
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sid=$(jq -r '.session_id // \"default\"'); kill \"$(cat /tmp/claude-caffeinate-$sid.pid 2>/dev/null)\" 2>/dev/null; rm -f \"/tmp/claude-caffeinate-$sid.pid\""
+          }
+        ]
       }
     ]
   },
@@ -53,7 +111,11 @@
     "command": "~/.claude/bin/statusline.py"
   },
   "enabledPlugins": {
-    "code-review@claude-code-plugins": true
+    "code-review@claude-code-plugins": true,
+    "ponytail@ponytail": true,
+    "claude-mem@thedotmack": true,
+    "ralph-loop@claude-plugins-official": true,
+    "superpowers@superpowers-marketplace": true
   },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
@@ -61,8 +123,22 @@
         "source": "git",
         "url": "https://github.com/anthropics/claude-code.git"
       }
+    },
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
+    },
+    "superpowers-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "obra/superpowers-marketplace"
+      }
     }
   },
-  "effortLevel": "high",
+  "effortLevel": "xhigh",
+  "tui": "fullscreen",
+  "skipWorkflowUsageWarning": true,
   "theme": "dark-daltonized"
 }
