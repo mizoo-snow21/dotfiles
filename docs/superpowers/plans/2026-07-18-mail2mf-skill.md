@@ -1695,6 +1695,10 @@ python3 "$SKILL_DIR/scripts/scan_mail.py" extract --out ~/.local/state/mail2mf/d
 python3 "$SKILL_DIR/scripts/mf_api.py" upload <保存されたファイル>...
 ```
 
+- **未ダウンロード添付**: extract が「Mail で対象メールを開いて添付を DL してから再実行」の
+  エラー(非0)を返したら、そのメールは添付本体が未 DL(`.partial.emlx`)。ユーザーに
+  「Mail で該当メールを開く(または Mail 設定 > アカウント > 添付を『すべて』DL)」よう案内し、
+  DL 後に同じ extract を再実行する。この間その添付は failed(非 permanent)として残り再試行対象。
 - upload の結果 JSON を見て 1 件ずつ state を確定する:
   - 成功: `scan_mail.py mark --key "<key>" --uploaded <file_id>`
   - 失敗: `scan_mail.py mark --key "<key>" --failed "<error>"`(402/413 は `--permanent` 付き)
@@ -1724,8 +1728,9 @@ Markdown レポートを出す:
 - `refresh token expired` → `mf_api.py auth-url` で URL を生成しユーザーに提示 →
   ブラウザで許可後、`localhost:3118` のエラーページの URL を貼ってもらい
   `mf_api.py auth-exchange "<callback_url>"`。
-- osascript 権限エラー → システム設定 > プライバシーとセキュリティ > オートメーション で
-  ターミナルに Mail の許可を付与するよう案内。
+- Envelope Index が開けない/フルディスクアクセス未許可 → システム設定 > プライバシーと
+  セキュリティ > フルディスクアクセス で端末アプリ(Ghostty 等)に許可するよう案内。
+- 添付未ダウンロード(extract が partial を報告)→ 上記「3. 抽出とアップロード」の案内に従う。
 - MCP/明細取得の失敗 → アップロードまでで完了とし、レポートは「突合スキップ」と明記。
 
 ## 注意
@@ -1739,7 +1744,7 @@ Markdown レポートを出す:
 実データのアップロードは行わない(承認ゲートは E2E でも適用)。
 
 1. `python3 scripts/mf_api.py list-box --limit 3` → 既存ファイルの JSON が返る(認証・Keychain 動作確認)
-2. `python3 scripts/scan_mail.py scan --since <3日前> --state /tmp/e2e-state.json` → candidates 取得
+2. `python3 scripts/scan_mail.py scan --since 2026-07-01 --state /tmp/e2e-state.json` → candidates 取得(要フルディスクアクセス。Apple Events を使わず数秒で返る)
 3. candidates から 1 件選び `extract --out /tmp/e2e-dl --state /tmp/e2e-state.json "<message_id>"` → リネーム済み PDF がローカルに保存される(**アップロードはしない**)
 4. アップロード経路は合成テスト PDF で確認する。**実行前にユーザーへ「テスト PDF を 1 件 Box にアップします。削除は Box の UI からになります」と確認し、明示的な承認を得ること。承認がなければこのステップはスキップし、その旨を報告する**:
    `printf '%%PDF-1.4\n%%%%EOF\n' > /tmp/mail2mf_e2e_test.pdf && python3 scripts/mf_api.py upload /tmp/mail2mf_e2e_test.pdf` → `file_id` が返り、`list-box` に `mail2mf_e2e_test.pdf` が現れる。完了後、Box UI からの削除手順をユーザーに案内
