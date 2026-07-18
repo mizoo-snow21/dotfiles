@@ -3,7 +3,7 @@
 
 サブコマンド:
   upload <file>...              PDF をクラウドBox へアップロード
-  list-box [--limit N]          Box ファイル一覧(重複チェック用)
+  list-box [--limit N] [--name FILE]  Box ファイル一覧(重複チェック用)
   transactions --from D --to D  決済明細を MCP 経由で取得
   auth-url                      再認可用 authorize URL 生成(PKCE)
   auth-exchange <callback_url>  コールバック URL をトークンに交換
@@ -214,7 +214,10 @@ def cmd_upload(args):
 def cmd_list_box(args):
     token = get_access_token()
     headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
-    url = BOX_URL + "?" + urllib.parse.urlencode({"limit": args.limit})
+    q = {"limit": args.limit}
+    if args.name:
+        q["file_name"] = args.name
+    url = BOX_URL + "?" + urllib.parse.urlencode(q)
     status, rh, resp = http("GET", url, headers, None)
     if status == 429:
         time.sleep(retry_after_seconds(rh))
@@ -397,6 +400,7 @@ def main(argv=None):
     p.set_defaults(fn=cmd_upload)
     p = sub.add_parser("list-box")
     p.add_argument("--limit", type=int, default=100)
+    p.add_argument("--name")
     p.set_defaults(fn=cmd_list_box)
     p = sub.add_parser("transactions")
     p.add_argument("--from", required=True)

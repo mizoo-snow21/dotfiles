@@ -60,8 +60,13 @@ python3 "$SKILL_DIR/scripts/mf_api.py" upload <保存されたファイル>...
   - 成功: `scan_mail.py mark --key "<key>" --uploaded <file_id>`
     (証憑メタ〔金額・日付・差出人・件名〕は uploaded エントリに保存され、後日の突合に使える)
   - 失敗: `scan_mail.py mark --key "<key>" --failed "<error>"`(402/413 は `--permanent` 付き)
-- アップロード前に必要なら `mf_api.py list-box --limit 200` で同名ファイルの有無を確認し、
-  既に存在するものはアップロードせず mark --uploaded で消し込む(file_id は一覧のもの)。
+- アップロード前の重複照合(state 消失時の最終防衛線): ファイル名はキー由来で決定的
+  (同一添付は常に同名)なので、アップ予定の各ファイルについて
+  `mf_api.py list-box --name "<final_name>"` で**完全名のサーバー側検索**を行う
+  (file_name フィルタは実 API で動作確認済み。ページング上限に依存しない)。
+  ヒットしたらアップロードせず、その file_id で mark --uploaded に消し込む。
+  **state が新規/作り直しの回は必ず全ファイルで実施**。通常回は省略可
+  (state の添付キー記録が一次防衛線)。
 
 ### 4. 突合レポート
 

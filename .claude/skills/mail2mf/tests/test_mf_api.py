@@ -202,8 +202,9 @@ class TestCmdUpload(unittest.TestCase):
 class TestListBox(unittest.TestCase):
     def test_list_box_retries_once_on_429(self):
         import io
+        from types import SimpleNamespace
 
-        args = mock.Mock(limit=10)
+        args = SimpleNamespace(limit=10, name=None)
         responses = [
             (429, {"Retry-After": "0"}, b""),
             (200, {}, b'{"files":[]}'),
@@ -218,6 +219,44 @@ class TestListBox(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(h.call_count, 2)
         self.assertEqual(out.getvalue(), '{"files":[]}\n')
+
+    def test_list_box_name_adds_file_name_query(self):
+        import io
+        import urllib.parse
+        from types import SimpleNamespace
+
+        args = SimpleNamespace(limit=50, name="20260701_x.jp_r_abc.pdf")
+        with (
+            mock.patch.object(mf_api, "get_access_token", return_value="tok"),
+            mock.patch.object(
+                mf_api, "http", return_value=(200, {}, b'{"files":[]}')
+            ) as h,
+            mock.patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            self.assertEqual(mf_api.cmd_list_box(args), 0)
+        url = h.call_args[0][1]
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+        self.assertEqual(q["file_name"], ["20260701_x.jp_r_abc.pdf"])
+        self.assertEqual(q["limit"], ["50"])
+
+    def test_list_box_without_name_omits_file_name(self):
+        import io
+        import urllib.parse
+        from types import SimpleNamespace
+
+        args = SimpleNamespace(limit=10, name=None)
+        with (
+            mock.patch.object(mf_api, "get_access_token", return_value="tok"),
+            mock.patch.object(
+                mf_api, "http", return_value=(200, {}, b'{"files":[]}')
+            ) as h,
+            mock.patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            mf_api.cmd_list_box(args)
+        url = h.call_args[0][1]
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+        self.assertNotIn("file_name", q)
+        self.assertEqual(q["limit"], ["10"])
 
 
 class TestMcp(unittest.TestCase):
