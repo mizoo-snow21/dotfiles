@@ -74,3 +74,7 @@ Library/Application Support/Claude/claude_desktop_config.json
 .CFUserTextEncoding
 __pycache__/
 *.pyc
+
+# superpowers-generated working documents (specs/plans/briefs)
+docs/superpowers/
+.superpowers/
