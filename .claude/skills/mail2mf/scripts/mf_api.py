@@ -14,7 +14,11 @@
 import argparse
 import getpass
 import json
+import os
+import secrets
 import subprocess
+import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -129,12 +133,108 @@ def get_access_token():
     return tok["access_token"]
 
 
+def retry_after_seconds(headers, default=5, cap=60):
+    """Retry-After を秒数に。非数値・負値・空は default、上限 cap。"""
+    raw = (headers or {}).get("Retry-After", "")
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        n = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return default
+    if n < 0:
+        return default
+    return min(n, cap)
+
+
+def build_multipart(fields):
+    """fields: [(name, filename|None, content_type, payload_bytes)]"""
+    boundary = "----mail2mf" + secrets.token_hex(8)
+    out = bytearray()
+    for name, filename, ctype, payload in fields:
+        out += (
+            '--%s\r\nContent-Disposition: form-data; name="%s"' % (boundary, name)
+        ).encode()
+        if filename:
+            out += ('; filename="%s"' % filename).encode()
+        out += ("\r\nContent-Type: %s\r\n\r\n" % ctype).encode()
+        out += payload + b"\r\n"
+    out += ("--%s--\r\n" % boundary).encode()
+    return bytes(out), "multipart/form-data; boundary=%s" % boundary
+
+
+def upload_one(token, path):
+    name = os.path.basename(path)
+    try:
+        with open(path, "rb") as f:
+            payload = f.read()
+    except OSError as e:
+        return {"error": str(e)}
+    body, ctype = build_multipart(
+        [
+            ("file", name, "application/pdf", payload),
+            (
+                "metadata",
+                None,
+                "application/json",
+                json.dumps({"file_name": name}, ensure_ascii=False).encode(),
+            ),
+        ]
+    )
+    headers = {"Authorization": "Bearer " + token, "Content-Type": ctype}
+    status, rh, resp = http("POST", BOX_URL, headers, body)
+    if status == 429:
+        time.sleep(retry_after_seconds(rh))
+        status, rh, resp = http("POST", BOX_URL, headers, body)
+    if status == 201:
+        try:
+            parsed = json.loads(resp)
+        except ValueError:
+            return {"error": "invalid JSON: %s" % resp[:200].decode("utf-8", "replace")}
+        file_id = parsed.get("file_id") or parsed.get("file", {}).get("file_id", "")
+        return {"file_id": file_id}
+    if status in (402, 413):
+        return {"error": "HTTP %d" % status, "permanent": True}
+    return {"error": "HTTP %d: %s" % (status, resp[:200].decode("utf-8", "replace"))}
+
+
+def cmd_upload(args):
+    token = get_access_token()
+    results, ok = {}, True
+    for path in args.files:
+        results[os.path.basename(path)] = r = upload_one(token, path)
+        if "error" in r:
+            ok = False
+    print(json.dumps(results, ensure_ascii=False))
+    return 0 if ok else 1
+
+
+def cmd_list_box(args):
+    token = get_access_token()
+    headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
+    url = BOX_URL + "?" + urllib.parse.urlencode({"limit": args.limit})
+    status, rh, resp = http("GET", url, headers, None)
+    if status == 429:
+        time.sleep(retry_after_seconds(rh))
+        status, rh, resp = http("GET", url, headers, None)
+    if status != 200:
+        raise SystemExit("list-box failed: HTTP %d" % status)
+    print(resp.decode())
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="mf_api.py")
-    parser.add_subparsers(dest="cmd")
-    parser.parse_args(argv)
-    parser.error("no command")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("upload")
+    p.add_argument("files", nargs="+")
+    p.set_defaults(fn=cmd_upload)
+    p = sub.add_parser("list-box")
+    p.add_argument("--limit", type=int, default=100)
+    p.set_defaults(fn=cmd_list_box)
+    args = parser.parse_args(argv)
+    return args.fn(args)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
