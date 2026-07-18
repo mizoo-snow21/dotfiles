@@ -9,8 +9,9 @@ description: Mail.app の決済系メール(PDF 証憑付き)をマネーフォ�
 以降 `SKILL_DIR` = このファイルのあるディレクトリ。
 
 スキャンは Envelope Index(SQLite)を read-only で直読み(Apple Events 不使用・高速)。
-抽出は AppleScript(`osascript`)で Mail に添付を save させる(未 DL の添付も自動 DL される・
-Gmail のラベル重複も回避)。**フルディスクアクセス(FDA)権限が必要**。
+抽出は `message://` URL で Mail にメッセージを開かせて添付を自動ダウンロードさせ、
+`Attachments/<ROWID>/` に現れたファイルを拾う(未 DL の添付も自動 DL・アーカイブ済み
+メールも可・1メッセージ ~15s)。**フルディスクアクセス(FDA)権限が必要**。
 認証情報は macOS Keychain(`mail2mf-mfc`)。
 
 ## 手順
@@ -46,10 +47,15 @@ python3 "$SKILL_DIR/scripts/scan_mail.py" extract --out ~/.local/state/mail2mf/d
 python3 "$SKILL_DIR/scripts/mf_api.py" upload <保存されたファイル>...
 ```
 
-- extract は AppleScript で Mail に添付を save させる(1メッセージ ~50s。未 DL 本体も
-  自動 DL される)。**Mail.app が起動している必要がある**。extract がエラー(非0)を返す
-  のは「メッセージが Mail 内で見つからない/対象添付が無い/タイムアウト」の場合で、
-  その添付は failed(非 permanent)として残り再試行対象。Mail を起動して再実行すればよい。
+- extract は `message://` で Mail にメッセージを開かせて添付を自動 DL させ、
+  `Attachments/<ROWID>/` をポーリングして拾う(1メッセージ ~15s、タイムアウト 90s。
+  Mail は `open` が自動起動する)。エラー(非0)時の stderr はそのまま案内に使える:
+  - `sources に ... がありません(再スキャンしてください)` → `scan` を再実行
+  - `Attachments バケットを解決できません` / `Attachments 照合タイムアウト/曖昧` →
+    再実行で直ることが多い。続く場合はそのメールを Mail で開いてから再実行
+  - `Mail で該当メール(件名)を開いてから再実行してください` → RFC Message-ID の無い
+    稀なメール。案内どおり手動で開いてから再実行
+  いずれも該当添付は failed(非 permanent)として残り再試行対象。
 - upload の結果 JSON を見て 1 件ずつ state を確定する:
   - 成功: `scan_mail.py mark --key "<key>" --uploaded <file_id>`
     (証憑メタ〔金額・日付・差出人・件名〕は uploaded エントリに保存され、後日の突合に使える)
@@ -83,8 +89,8 @@ state.json の `uploaded` エントリ(各キーに保存された金額・日�
   `mf_api.py auth-exchange "<callback_url>"`。
 - Envelope Index が開けない/フルディスクアクセス未許可 → システム設定 > プライバシーと
   セキュリティ > フルディスクアクセス で端末アプリ(Ghostty 等)に許可するよう案内。
-- extract がメッセージ未検出/タイムアウトで失敗 → Mail.app が起動しているか確認し再実行。
-  該当添付は failed(非 permanent)で残るので再試行対象。
+- extract の失敗 → 手順3の stderr 対応表に従う(再スキャン/再実行/対象メールを Mail で
+  開く)。該当添付は failed(非 permanent)で残るので再試行対象。
 - MCP/明細取得の失敗 → アップロードまでで完了とし、レポートは「突合スキップ」と明記。
 
 ## 注意
