@@ -219,5 +219,94 @@ class TestListBox(unittest.TestCase):
         self.assertEqual(out.getvalue(), '{"files":[]}\n')
 
 
+class TestMcp(unittest.TestCase):
+    def test_parse_sse_takes_last_data_line(self):
+        text = 'event: message\ndata: {"a": 1}\n\ndata: {"b": 2}\n'
+        self.assertEqual(mf_api.parse_sse(text), {"b": 2})
+
+    def test_parse_sse_plain_json_fallback(self):
+        self.assertEqual(mf_api.parse_sse('{"x": 1}'), {"x": 1})
+
+    def test_mcp_call_flow(self):
+        init = 'data: {"jsonrpc":"2.0","id":1,"result":{}}\n'
+        result = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {"content": [{"type": "text", "text": '{"transactions": []}'}]},
+        }
+        responses = [
+            (200, {"Mcp-Session-Id": "S1"}, init.encode()),
+            (202, {}, b""),
+            (200, {}, ("data: " + json.dumps(result) + "\n").encode()),
+        ]
+        with (
+            mock.patch.object(mf_api, "get_access_token", return_value="tok"),
+            mock.patch.object(mf_api, "http", side_effect=responses) as h,
+        ):
+            out = mf_api.mcp_call(
+                "mfc_ca_getTransactions",
+                {"start_date": "2026-04-01", "end_date": "2026-07-18"},
+            )
+        self.assertEqual(out, {"transactions": []})
+        # 2回目以降はセッション ID を送っている
+        self.assertEqual(h.call_args_list[2][0][2].get("Mcp-Session-Id"), "S1")
+
+    def test_mcp_call_error_result_exits(self):
+        init = 'data: {"jsonrpc":"2.0","id":1,"result":{}}\n'
+        err = 'data: {"jsonrpc":"2.0","id":2,"error":{"code":-1,"message":"boom"}}\n'
+        responses = [
+            (200, {"Mcp-Session-Id": "S1"}, init.encode()),
+            (202, {}, b""),
+            (200, {}, err.encode()),
+        ]
+        with (
+            mock.patch.object(mf_api, "get_access_token", return_value="tok"),
+            mock.patch.object(mf_api, "http", side_effect=responses),
+        ):
+            with self.assertRaises(SystemExit):
+                mf_api.mcp_call("mfc_ca_getTransactions", {})
+
+    def test_parse_sse_unparseable_exits(self):
+        for bad in ("", "<html>oops</html>"):
+            with self.subTest(bad=bad):
+                with self.assertRaises(SystemExit) as cm:
+                    mf_api.parse_sse(bad)
+                self.assertIn("unparseable", str(cm.exception).lower())
+
+    def test_mcp_call_initialize_error_stops_early(self):
+        init = (
+            'data: {"jsonrpc":"2.0","id":1,"error":{"code":-1,"message":"init fail"}}\n'
+        )
+        responses = [(200, {"Mcp-Session-Id": "S1"}, init.encode())]
+        with (
+            mock.patch.object(mf_api, "get_access_token", return_value="tok"),
+            mock.patch.object(mf_api, "http", side_effect=responses) as h,
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                mf_api.mcp_call("mfc_ca_getTransactions", {})
+        self.assertEqual(h.call_count, 1)
+        self.assertIn("init fail", str(cm.exception))
+
+    def test_mcp_call_session_id_case_insensitive(self):
+        init = 'data: {"jsonrpc":"2.0","id":1,"result":{}}\n'
+        result = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {"content": [{"type": "text", "text": '{"transactions": []}'}]},
+        }
+        responses = [
+            (200, {"mcp-session-id": "S1"}, init.encode()),
+            (202, {}, b""),
+            (200, {}, ("data: " + json.dumps(result) + "\n").encode()),
+        ]
+        with (
+            mock.patch.object(mf_api, "get_access_token", return_value="tok"),
+            mock.patch.object(mf_api, "http", side_effect=responses) as h,
+        ):
+            out = mf_api.mcp_call("mfc_ca_getTransactions", {})
+        self.assertEqual(out, {"transactions": []})
+        self.assertEqual(h.call_args_list[2][0][2].get("Mcp-Session-Id"), "S1")
+
+
 if __name__ == "__main__":
     unittest.main()

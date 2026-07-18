@@ -223,6 +223,97 @@ def cmd_list_box(args):
     return 0
 
 
+def parse_sse(text):
+    last = None
+    try:
+        for line in text.splitlines():
+            if line.startswith("data: "):
+                last = json.loads(line[6:])
+        if last is None:
+            last = json.loads(text)
+    except (TypeError, ValueError):
+        raise SystemExit("MCP: unparseable response: %s" % (text or "")[:200])
+    return last
+
+
+def _header_ci(headers, name):
+    """応答ヘッダーを case-insensitive に取得。"""
+    want = name.lower()
+    for k, v in (headers or {}).items():
+        if str(k).lower() == want:
+            return v
+    return None
+
+
+def mcp_call(tool, arguments):
+    token = get_access_token()
+    base = {
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
+
+    def post(payload, sid=None):
+        h = dict(base)
+        if sid:
+            h["Mcp-Session-Id"] = sid
+        status, rh, body = http("POST", MCP_URL, h, json.dumps(payload).encode())
+        if status >= 400:
+            raise SystemExit(
+                "MCP HTTP %d: %s" % (status, body[:200].decode("utf-8", "replace"))
+            )
+        return _header_ci(rh, "mcp-session-id"), body.decode("utf-8", "replace")
+
+    sid, init_body = post(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "mail2mf", "version": "1.0"},
+            },
+        }
+    )
+    init_msg = parse_sse(init_body) if init_body.strip() else {}
+    if "error" in init_msg:
+        raise SystemExit(
+            "MCP initialize error: %s"
+            % json.dumps(init_msg["error"], ensure_ascii=False)
+        )
+    post({"jsonrpc": "2.0", "method": "notifications/initialized"}, sid)
+    _, body = post(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": tool, "arguments": arguments},
+        },
+        sid,
+    )
+    msg = parse_sse(body)
+    if "error" in msg:
+        raise SystemExit(
+            "MCP tool error: %s" % json.dumps(msg["error"], ensure_ascii=False)
+        )
+    content = msg.get("result", {}).get("content", [])
+    text = content[0].get("text", "") if content else ""
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
+
+
+def cmd_transactions(args):
+    out = mcp_call(
+        "mfc_ca_getTransactions",
+        {"start_date": getattr(args, "from"), "end_date": args.to},
+    )
+    print(json.dumps(out, ensure_ascii=False, indent=1))
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="mf_api.py")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -232,6 +323,10 @@ def main(argv=None):
     p = sub.add_parser("list-box")
     p.add_argument("--limit", type=int, default=100)
     p.set_defaults(fn=cmd_list_box)
+    p = sub.add_parser("transactions")
+    p.add_argument("--from", required=True)
+    p.add_argument("--to", dest="to", required=True)
+    p.set_defaults(fn=cmd_transactions)
     args = parser.parse_args(argv)
     return args.fn(args)
 
