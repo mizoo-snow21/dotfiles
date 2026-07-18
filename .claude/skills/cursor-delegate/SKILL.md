@@ -37,11 +37,14 @@ Do NOT re-inject project constraints into the prompt. Cursor already has them.
 ### 1. Claude Code prepares
 
 ```bash
-# Create branch (follow project naming conventions)
-git checkout <base-branch> && git checkout -b <branch-name>
+# Verify clean working tree BEFORE switching branches.
+# If output is non-empty, STOP — do not proceed. Ask the user to commit or
+# stash their work first; otherwise it gets carried into the delegation
+# branch and mistaken for Cursor's changes.
+git status --short
 
-# Verify clean working tree
-git status --short  # should be empty
+# Only after the check passes: create branch (follow project naming conventions)
+git checkout <base-branch> && git checkout -b <branch-name>
 ```
 
 ### 2. Claude Code constructs the prompt
@@ -80,11 +83,11 @@ Implement using TDD:
 ```bash
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model grok-4.5-fast-high \
+  --model cursor-grok-4.5-medium-fast \
   "<prompt>"
 ```
 
-- Default to `--model grok-4.5-fast-high` unless user specifies otherwise
+- Default to `--model cursor-grok-4.5-medium-fast` unless user specifies otherwise
 - Do NOT use `--yolo`. Use default approval-based execution
 
 ### 4. Claude Code verifies
@@ -104,15 +107,15 @@ git commit -m "<message>"
 
 If unexpected files were changed:
 ```bash
-# 1. Revert individual files
+# 1. Enumerate the diff and identify each unexpected path explicitly
+git status --porcelain
+
+# 2. Revert ONLY explicitly identified files, one path at a time,
+#    after confirming each is task-unrelated and has no concurrent/user edits
 git checkout -- <unexpected-file>
-
-# 2. Revert multiple unexpected files
-git diff --name-only | grep -v '<expected-file>' | xargs git checkout --
-
-# 3. Last resort (only if working tree was clean before delegation)
-git checkout -- .
 ```
+- NEVER blanket-revert: `git checkout -- .` and piping `git diff --name-only` into `git checkout` are forbidden — they permanently erase concurrent or user changes
+- If unsure whether a change is safe to discard, prefer recoverable `git stash push -- <path>` over `git checkout --`
 
 ### 5. Claude Code reviews → push → PR
 
@@ -125,7 +128,7 @@ Follow the project's review workflow (e.g., spec review + quality review via sub
 # NOTE: --continue does NOT inherit the session model (CLI default wins) — always pass --model explicitly
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model grok-4.5-fast-high \
+  --model cursor-grok-4.5-medium-fast \
   --continue \
   "<follow-up instructions>"
 
@@ -149,6 +152,6 @@ cursor agent ls
 | `-p` | Headless output (required for CLI execution) |
 | `--trust` | Trust workspace (required for headless mode) |
 | `--workspace <path>` | Working directory |
-| `--model <model>` | Model selection (default: grok-4.5-fast-high) |
+| `--model <model>` | Model selection (default: cursor-grok-4.5-medium-fast) |
 | `--continue` | Continue previous session |
 | `--resume <chatId>` | Resume specific session |

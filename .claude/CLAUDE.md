@@ -34,10 +34,10 @@
 
 ```bash
 # Initial review
-codex exec "Review this document. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
+codex exec -m gpt-5.6-sol "Review this document. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
 
 # Follow-up review after updates
-codex exec resume --last "The document was updated. Review it again. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
+codex exec resume --last -m gpt-5.6-sol "The document was updated. Review it again. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
 ```
 
 - **`< /dev/null` は必須**: stdin を閉じないと、バックグラウンド実行時に codex が stdin のパイプ待ちで永久にハングする（2026-07-09 実測: バックグラウンド化で 100% ハング・フォアグラウンド再実行で毎回 1〜3 分完了）。`codex exec` を呼ぶ**すべて**のコマンドに付けること
@@ -105,7 +105,8 @@ codex exec resume --last "The document was updated. Review it again. Do not nitp
 - Only merge to main after all reviews pass and `finishing-a-development-branch` is complete
 
 ### Cursor Implementation Rules (Non-Negotiable)
-- **Model: default `grok-4.5-fast-high`**（Cursor Grok 4.5 Medium Fast） — invoke with `cursor agent --model grok-4.5-fast-high`. Pass `--model` explicitly in scripts and prompts for reproducibility. Never pass Codex models (e.g. `gpt-5.3-codex-high`) — Codex is reviewer-side only (see Agent Roles)
+- **Model: default `cursor-grok-4.5-medium-fast`**（Cursor Grok 4.5 Medium Fast。旧エイリアス `grok-4.5-fast-high` と同一実体 — 名前に high とあるが effort は medium なので使わない） — invoke with `cursor agent --model cursor-grok-4.5-medium-fast`. Pass `--model` explicitly in scripts and prompts for reproducibility. Never pass Codex models (e.g. `gpt-5.3-codex-high`) — Codex is reviewer-side only (see Agent Roles)
+- **Effort escalation (per task)**: keep `cursor-grok-4.5-medium-fast` as the default. Escalate to `--model cursor-grok-4.5-high-fast` only for tasks involving complex refactoring or tricky multi-step debugging. Per-token price is the same (fast tier); high effort just consumes more reasoning tokens, so escalate only when it is likely to save review round-trips
 - **All implementation MUST go through Cursor** — Claude Code subagents must NOT write implementation code. Claude Code is for planning, review, and research only
 - **TDD stays inside Cursor** — never split tests and implementation into separate tasks. Before each Cursor dispatch, load `superpowers:test-driven-development` via the Skill tool and **embed its content** into the Cursor prompt (not just the 5-line summary below). The 5-line block is a minimum fallback, not a substitute:
   ```
@@ -119,8 +120,12 @@ codex exec resume --last "The document was updated. Review it again. Do not nitp
   ```
 - **Fresh Cursor session per task** — never implement multiple tasks in a single Cursor invocation
 - **Route review fixes back to Cursor** — when two-stage review finds issues, don't fix them in Claude Code. Send fixes to Cursor via `--continue` and re-review
-- **Pass Cursor prompts inline (do NOT write to .md files)** — dispatch via heredoc directly. The pattern of `Write` to `/tmp/cursor-*.md` then `cat | cursor-agent` is forbidden (slows down execution). Codex auto-review is reserved for spec / plan documents only, not Cursor prompts. Inline prompts must still embed all mandatory CLAUDE.md requirements (reference files, TDD block, `--model grok-4.5-fast-high`).
-  - Example: `cursor agent -p --trust --model grok-4.5-fast-high "$(cat <<'EOF' ...prompt body... EOF)"`
+- **Pass Cursor prompts inline (do NOT write to .md files)** — dispatch via heredoc directly. The pattern of `Write` to `/tmp/cursor-*.md` then `cat | cursor-agent` is forbidden (slows down execution). Codex auto-review is reserved for spec / plan documents only, not Cursor prompts. Inline prompts must still embed all mandatory CLAUDE.md requirements (reference files, TDD block, an explicit `--model` — `cursor-grok-4.5-medium-fast` by default, or `cursor-grok-4.5-high-fast` when the effort-escalation rule applies).
+  - Example: `cursor agent -p --trust --model cursor-grok-4.5-medium-fast "$(cat <<'EOF' ...prompt body... EOF)"`
+
+- **Impact 分析は dispatch 前に（GitNexus 等 impact ツールのあるプロジェクト）** — 「編集前に impact 必須」は Cursor 委譲では字義通り守れない（Cursor が編集主体で impact を持たず、diff が出た後にしか回せない）。代わりに **Cursor に dispatch する前**に plan が名指しした対象シンボルへ `impact({target, direction:"upstream"})` を回し blast radius を plan に記録する（この時点でコード未変更＝実質「編集前」）。HIGH/CRITICAL は dispatch 前のゲート（方針見直し or ユーザー承認）。可能なら blast radius を Cursor プロンプトに埋め込み「呼び出し元の契約を壊すな」と具体指示する。
+  - **計画外シンボルの取りこぼし対策（必須）**: pre-dispatch impact は plan が予見したシンボルしかカバーしない。Cursor 返却後・commit 前に `detect_changes()` で実際に変更されたシンボルを impact 済み集合と突き合わせ、未評価の差分があれば改めて `impact()` を回す。評価せず commit しない。想定外の広がり／HIGH・CRITICAL が出たら plan に取り込み直す（再 dispatch）か差し戻す。
+  - **インデックス鮮度が前提**: impact/detect_changes はインデックスを読むため古いと不正確。planning バッチ前に再インデックス（例: `node .gitnexus/run.cjs analyze`）してから回す。
 
 ### Two-Stage Review (superpowers skills — MANDATORY。superpowers 6.x 構成)
 - **Stage 1: Task Review（タスクごとに1回）** — never batch after all tasks are done
@@ -133,7 +138,7 @@ codex exec resume --last "The document was updated. Review it again. Do not nitp
   2. Following the loaded template, dispatch a code reviewer subagent via `Agent` tool (`subagent_type: "general-purpose"`)
   3. Provide: BASE_SHA, HEAD_SHA（ブランチ全体）, what was implemented, plan reference
   4. Must pass ✅ (or "With fixes") before creating the PR
-  5. **If the task touches UI/frontend**: both superpowers reviewer templates are read-only, diff-based (they explicitly avoid re-executing tests the implementer already ran), so they cannot catch bugs that only surface by actually running the UI. For UI/frontend tasks, also drive the change in a real browser (e.g. via `web-devloop-tester`) before marking Quality Review passed — do not rely on diff-reading alone. Logic-only tasks keep the standard read-only review.
+  5. **If the task touches UI/frontend**: both superpowers reviewer templates are read-only, diff-based (they explicitly avoid re-executing tests the implementer already ran), so they cannot catch bugs that only surface by actually running the UI. For UI/frontend tasks, also drive the change in a real browser via the `webapp-testing` skill (Playwright: launch the local app, screenshot, check DOM/logs) before marking Quality Review passed — do not rely on diff-reading alone. Logic-only tasks keep the standard read-only review.
 - **Both stages are separate subagents** — never combine, never do inline, never skip
 - **Always invoke the Skill tool first** — load the template before dispatching the Agent subagent（Skill ツールに未登録の場合はプラグインキャッシュのテンプレートファイルを直接 Read して従う）
 - **Reviewer model**: Task Review defaults to **sonnet** (the latest mid-tier model in the harness; when new models ship, reinterpret as "default = latest mid-tier"). Branch Review follows the superpowers default — the most capable available model, always specified explicitly in the dispatch
