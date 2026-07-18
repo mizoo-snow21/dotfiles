@@ -15,12 +15,19 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
 import sys
+import time
+import unicodedata
+import urllib.parse
 
 STATE_PATH = os.path.expanduser("~/.local/state/mail2mf/state.json")
 MAIL_ROOT = os.path.expanduser("~/Library/Mail/V10")
 ENVELOPE_INDEX = os.path.join(MAIL_ROOT, "MailData", "Envelope Index")
+POLL_INTERVAL = 2
+POLL_TIMEOUT = 90
 
 AMOUNT_RE = re.compile(r"(?:[¥￥]\s*([0-9][0-9,]*)|([0-9][0-9,]*)\s*円)")
 
@@ -47,6 +54,12 @@ def load_state(path=STATE_PATH):
     state.setdefault("last_scan", None)
     for k in ("pending", "uploaded", "failed", "discarded", "sources", "skipped"):
         state.setdefault(k, {})
+    # 旧形式 sources[mid]=int → [int]
+    for mid, v in list(state["sources"].items()):
+        if isinstance(v, list):
+            state["sources"][mid] = [int(x) for x in v]
+        elif v is not None:
+            state["sources"][mid] = [int(v)]
     return state
 
 
@@ -125,12 +138,16 @@ def open_envelope_index(path=ENVELOPE_INDEX):
     if not os.path.exists(path):
         raise SystemExit(
             "Envelope Index が見つからない/読めません。システム設定 > プライバシーと"
-            "セキュリティ > フルディスクアクセス で端末アプリに許可してください: %s" % path)
+            "セキュリティ > フルディスクアクセス で端末アプリに許可してください: %s"
+            % path
+        )
     try:
         return sqlite3.connect("file:%s?mode=ro" % path, uri=True)
     except sqlite3.Error as e:
         raise SystemExit(
-            "Envelope Index を開けません(フルディスクアクセスを確認してください): %s" % e)
+            "Envelope Index を開けません(フルディスクアクセスを確認してください): %s"
+            % e
+        )
 
 
 def query_attachment_messages(conn, cutoff_epoch):
@@ -142,9 +159,18 @@ def query_attachment_messages(conn, cutoff_epoch):
         "LEFT JOIN addresses ad ON ad.ROWID=m.sender "
         "LEFT JOIN subjects s ON s.ROWID=m.subject "
         "WHERE m.date_received>=? AND m.deleted=0 "
-        "ORDER BY m.date_received DESC, m.ROWID", (cutoff_epoch,))
-    return [{"rowid": rowid, "date_received": dr, "sender": addr or "", "subject": subj or ""}
-            for rowid, dr, addr, subj in cur.fetchall()]
+        "ORDER BY m.date_received DESC, m.ROWID",
+        (cutoff_epoch,),
+    )
+    return [
+        {
+            "rowid": rowid,
+            "date_received": dr,
+            "sender": addr or "",
+            "subject": subj or "",
+        }
+        for rowid, dr, addr, subj in cur.fetchall()
+    ]
 
 
 def query_messages_by_rowids(conn, rowids):
@@ -158,9 +184,18 @@ def query_messages_by_rowids(conn, rowids):
         "FROM messages m "
         "LEFT JOIN addresses ad ON ad.ROWID=m.sender "
         "LEFT JOIN subjects s ON s.ROWID=m.subject "
-        "WHERE m.ROWID IN (%s) AND m.deleted=0" % placeholders, ids)
-    return [{"rowid": rowid, "date_received": dr, "sender": addr or "", "subject": subj or ""}
-            for rowid, dr, addr, subj in cur.fetchall()]
+        "WHERE m.ROWID IN (%s) AND m.deleted=0" % placeholders,
+        ids,
+    )
+    return [
+        {
+            "rowid": rowid,
+            "date_received": dr,
+            "sender": addr or "",
+            "subject": subj or "",
+        }
+        for rowid, dr, addr, subj in cur.fetchall()
+    ]
 
 
 def build_emlx_index(mail_root=MAIL_ROOT):
@@ -182,7 +217,7 @@ def read_emlx(path):
         raw = f.read()
     nl = raw.index(b"\n")
     count = int(raw[:nl].strip())
-    body = raw[nl + 1:nl + 1 + count]
+    body = raw[nl + 1 : nl + 1 + count]
     return email.message_from_bytes(body)
 
 
@@ -191,11 +226,24 @@ def emlx_message_id(msg):
     return mid.strip() if mid else ""
 
 
+def decode_mime_name(fn):
+    """RFC2047 生エンコードの添付名をデコード。含まなければそのまま返す。"""
+    if not fn or "=?" not in fn:
+        return fn or ""
+    out = []
+    for frag, charset in email.header.decode_header(fn):
+        if isinstance(frag, bytes):
+            out.append(frag.decode(charset or "utf-8", "replace"))
+        else:
+            out.append(frag)
+    return "".join(out)
+
+
 def pdf_parts(msg):
     out = []
     i = 0
     for part in msg.walk():
-        fn = part.get_filename()
+        fn = decode_mime_name(part.get_filename())
         if not fn:
             continue
         i += 1
@@ -217,8 +265,11 @@ def _body_preview(msg):
         if part.get_content_type() == "text/plain" and not part.get_filename():
             try:
                 txt = part.get_payload(decode=True)
-                return (txt.decode(part.get_content_charset() or "utf-8", "replace")
-                        if txt else "")[:1000]
+                return (
+                    txt.decode(part.get_content_charset() or "utf-8", "replace")
+                    if txt
+                    else ""
+                )[:1000]
             except Exception:
                 return ""
     return ""
@@ -248,8 +299,7 @@ def cmd_scan(args):
         by_id = {r["rowid"]: r for r in rows}
         for r in query_messages_by_rowids(conn, state["skipped"]):
             by_id.setdefault(r["rowid"], r)
-        rows = sorted(by_id.values(),
-                      key=lambda r: (-r["date_received"], -r["rowid"]))
+        rows = sorted(by_id.values(), key=lambda r: (-r["date_received"], -r["rowid"]))
     finally:
         conn.close()
     emlx = build_emlx_index(MAIL_ROOT)
@@ -268,36 +318,51 @@ def cmd_scan(args):
             except Exception:
                 msg = None
         if msg is None:
-            print("skip rowid %d: .emlx 未在/解析不可(次回再スキャン)" % r["rowid"],
-                  file=sys.stderr)
+            print(
+                "skip rowid %d: .emlx 未在/解析不可(次回再スキャン)" % r["rowid"],
+                file=sys.stderr,
+            )
             new_skipped[str(r["rowid"])] = {
-                "date": r["date_received"], "at": scan_started}
+                "date": r["date_received"],
+                "at": scan_started,
+            }
             continue
         parts = pdf_parts(msg)
         if not parts:
             continue
         mid = emlx_message_id(msg) or ("rowid:%d" % r["rowid"])
+        # dedup で候補は1つでも、同一 Message-ID の全コピー ROWID を蓄積
+        srcs = state["sources"].setdefault(mid, [])
+        if r["rowid"] not in srcs:
+            srcs.append(r["rowid"])
         if mid in seen:
             continue
         seen.add(mid)
-        state["sources"][mid] = r["rowid"]
-        messages.append({
-            "message_id": mid,
-            "date": datetime.datetime.fromtimestamp(r["date_received"]).astimezone()
-                    .isoformat(timespec="seconds"),
-            "sender": r["sender"], "subject": r["subject"],
-            "body_preview": _body_preview(msg),
-            "pdf_attachments": [{"index": i, "name": n} for i, n, _ in parts]})
+        messages.append(
+            {
+                "message_id": mid,
+                "date": datetime.datetime.fromtimestamp(r["date_received"])
+                .astimezone()
+                .isoformat(timespec="seconds"),
+                "sender": r["sender"],
+                "subject": r["subject"],
+                "body_preview": _body_preview(msg),
+                "pdf_attachments": [{"index": i, "name": n} for i, n, _ in parts],
+            }
+        )
 
     pending, candidates = build_candidates(state, messages)
     state["pending"] = pending
     state["skipped"] = new_skipped
-    save_state(state, args.state)      # 候補 + sources + skipped を先に永続化
+    save_state(state, args.state)  # 候補 + sources + skipped を先に永続化
     # cursor は常に scan_started へ前進(未解決は skipped で再試行するため巻き戻さない)
     state["last_scan"] = scan_started
     save_state(state, args.state)
-    print(json.dumps({"since": since, "candidates": candidates},
-                     ensure_ascii=False, indent=1))
+    print(
+        json.dumps(
+            {"since": since, "candidates": candidates}, ensure_ascii=False, indent=1
+        )
+    )
     return 0
 
 
@@ -305,20 +370,126 @@ def plan_extract_targets(state, message_id):
     """pending と再試行可能な failed から (添付順位, 添付名, 保存ファイル名) を得る。"""
     prefix = message_id + "/"
     sources = list(state["pending"].items()) + [
-        (k, v) for k, v in state["failed"].items() if not v.get("permanent")]
+        (k, v) for k, v in state["failed"].items() if not v.get("permanent")
+    ]
     targets, seen = [], set()
     for key, meta in sources:
         if not key.startswith(prefix) or key in seen:
             continue
-        m = re.match(r"^(\d+)-(.*)$", key[len(prefix):])
+        m = re.match(r"^(\d+)-(.*)$", key[len(prefix) :])
         if not m:
             continue
         seen.add(key)
         idx, name = int(m.group(1)), m.group(2)
-        targets.append((idx, name,
-                        final_name(key, meta.get("date", ""),
-                                   meta.get("sender", ""), name)))
+        targets.append(
+            (
+                idx,
+                name,
+                final_name(key, meta.get("date", ""), meta.get("sender", ""), name),
+            )
+        )
     return sorted(targets)
+
+
+def message_url(mid):
+    core = mid[1:-1] if mid.startswith("<") and mid.endswith(">") else mid
+    return "message://%3C" + urllib.parse.quote(core, safe="") + "%3E"
+
+
+def _attachment_dirs(emlx_index, rowids):
+    dirs = []
+    for rid in rowids:
+        path = emlx_index.get(str(rid))
+        if not path:
+            continue
+        bucket = os.path.dirname(os.path.dirname(path))
+        dirs.append(os.path.join(bucket, "Attachments", str(rid)))
+    return dirs
+
+
+def _strip_ws(s):
+    return "".join(c for c in s if not c.isspace())
+
+
+def names_match(expected, actual):
+    """そのまま → NFC → NFC+全空白除去 の順で一致判定。"""
+    if expected == actual:
+        return True
+    e = unicodedata.normalize("NFC", expected)
+    a = unicodedata.normalize("NFC", actual)
+    if e == a:
+        return True
+    return _strip_ws(e) == _strip_ws(a)
+
+
+def list_copy_pdfs(adir):
+    """Attachments/<ROWID> 内の *.pdf を (part, path, filename) 昇順で列挙。"""
+    out = []
+    if not os.path.isdir(adir):
+        return out
+    for ent in os.listdir(adir):
+        if not ent.isdigit():
+            continue
+        part_dir = os.path.join(adir, ent)
+        if not os.path.isdir(part_dir):
+            continue
+        for fn in os.listdir(part_dir):
+            if not fn.lower().endswith(".pdf"):
+                continue
+            p = os.path.join(part_dir, fn)
+            if os.path.isfile(p):
+                out.append((int(ent), p, fn))
+    out.sort()
+    return out
+
+
+def match_targets(targets, copies):
+    """名前一致 + 1コピー内数一致フォールバック。
+
+    targets: [(idx, name, fname), ...]
+    copies: [[(part, path, filename), ...], ...]  # コピーごと
+    returns: (assignments, remaining)
+      assignments: [(target, path), ...] 割当済み
+      remaining: 未割当 targets
+    """
+    name_counts = {}
+    for t in targets:
+        name_counts[t[1]] = name_counts.get(t[1], 0) + 1
+    assigned = {}  # target index → path
+    used = set()
+
+    # (i) 名前一致: 期待名が一意 かつ ファイル一致がちょうど1件のときのみ
+    for i, (_idx, name, _fname) in enumerate(targets):
+        if name_counts[name] != 1:
+            continue
+        hits = []
+        for copy in copies:
+            for _part, path, fn in copy:
+                if path in used:
+                    continue
+                if names_match(name, fn):
+                    hits.append(path)
+        if len(hits) == 1:
+            assigned[i] = hits[0]
+            used.add(hits[0])
+
+    # (ii) フォールバック: 1コピー内の未割当 PDF 数 == 残り期待数 のときのみ
+    remaining_idxs = [i for i in range(len(targets)) if i not in assigned]
+    if remaining_idxs:
+        for copy in copies:
+            free = [(part, path, fn) for part, path, fn in copy if path not in used]
+            if len(free) == len(remaining_idxs) and remaining_idxs:
+                free.sort(key=lambda x: x[0])
+                rem = sorted(remaining_idxs, key=lambda i: targets[i][0])
+                for ti, (_part, path, _fn) in zip(rem, free):
+                    assigned[ti] = path
+                    used.add(path)
+                remaining_idxs = []
+                break
+
+    assignments = [(targets[i], assigned[i]) for i in sorted(assigned)]
+    remaining = [targets[i] for i in remaining_idxs]
+    return assignments, remaining
 
 
 def cmd_extract(args):
@@ -329,26 +500,61 @@ def cmd_extract(args):
     for mid in args.message_ids:
         targets = plan_extract_targets(state, mid)
         if not targets:
-            print("no pending attachments for %s" % mid, file=sys.stderr); ok = False; continue
-        rowid = state.get("sources", {}).get(mid)
-        path = emlx.get(str(rowid)) if rowid is not None else None
-        if not path or not os.path.exists(path):
-            print("emlx not found for %s (再スキャンしてください)" % mid, file=sys.stderr)
-            ok = False; continue
-        try:
-            parts = {(i, n): p for i, n, p in pdf_parts(read_emlx(path))}
-        except Exception as e:
-            print("emlx parse failed for %s: %s" % (mid, e), file=sys.stderr); ok = False; continue
-        for idx, name, fname in targets:
+            print("no pending attachments for %s" % mid, file=sys.stderr)
+            ok = False
+            continue
+        rowids = state["sources"].get(mid)
+        if not rowids:
+            print(
+                "sources に %s がありません(再スキャンしてください)" % mid,
+                file=sys.stderr,
+            )
+            ok = False
+            continue
+        att_dirs = _attachment_dirs(emlx, rowids)
+        if not att_dirs:
+            print("Attachments バケットを解決できません: %s" % mid, file=sys.stderr)
+            ok = False
+            continue
+
+        def _try_match():
+            copies = [list_copy_pdfs(d) for d in att_dirs]
+            return match_targets(targets, copies)
+
+        assignments, remaining = _try_match()
+        if remaining:
+            synthetic = mid.startswith("rowid:")
+            if not synthetic:
+                subprocess.run(["open", message_url(mid)], check=False)
+            deadline = time.monotonic() + POLL_TIMEOUT
+            while remaining and time.monotonic() < deadline:
+                time.sleep(POLL_INTERVAL)
+                assignments, remaining = _try_match()
+            if remaining:
+                if synthetic:
+                    k0 = attachment_key(mid, targets[0][0], targets[0][1])
+                    meta = state["pending"].get(k0) or state["failed"].get(k0) or {}
+                    print(
+                        "Mail で該当メール(%s)を開いてから再実行してください: %s"
+                        % (meta.get("subject", ""), mid),
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        "Attachments 照合タイムアウト/曖昧: %s" % mid, file=sys.stderr
+                    )
+                ok = False
+                continue
+        for (idx, name, fname), src in assignments:
             key = attachment_key(mid, idx, name)
-            payload = parts.get((idx, name))
-            if payload is None:
-                print("attachment %d of %s は未ダウンロード。Mail で対象メールを開いて"
-                      "添付を DL してから再実行してください。" % (idx, mid), file=sys.stderr)
-                ok = False; continue
+            with open(src, "rb") as f:
+                head = f.read(4)
+            if head != b"%PDF":
+                print("attachment %s of %s is not PDF" % (name, mid), file=sys.stderr)
+                ok = False
+                continue
             dst = os.path.join(args.out, fname)
-            with open(dst, "wb") as f:
-                f.write(payload)
+            shutil.copy2(src, dst)
             results[key] = dst
     print(json.dumps(results, ensure_ascii=False))
     return 0 if ok else 1
@@ -362,17 +568,16 @@ def cmd_mark(args):
         or {}
     )
     now = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    evidence = {
+        k: v for k, v in meta.items() if k in ("subject", "sender", "date", "amounts")
+    }
     if args.uploaded:
-        state["uploaded"][args.key] = {"file_id": args.uploaded, "at": now}
+        entry = {"file_id": args.uploaded, "at": now}
+        entry.update(evidence)
+        state["uploaded"][args.key] = entry
     else:
         entry = {"error": args.failed, "at": now}
-        entry.update(
-            {
-                k: v
-                for k, v in meta.items()
-                if k in ("subject", "sender", "date", "amounts")
-            }
-        )
+        entry.update(evidence)
         if args.permanent:
             entry["permanent"] = True
         state["failed"][args.key] = entry

@@ -5,6 +5,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+import urllib.parse
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
@@ -147,6 +148,26 @@ class TestMarkDiscard(unittest.TestCase):
         st = scan_mail.load_state(self.path)
         self.assertNotIn("k1", st["pending"])
         self.assertEqual(st["uploaded"]["k1"]["file_id"], "FILE9")
+
+    def test_mark_uploaded_preserves_evidence_meta(self):
+        st = scan_mail.load_state(self.path)
+        st["pending"]["k1"] = {
+            "subject": "領収書",
+            "sender": "shop@x.jp",
+            "date": "2026-07-01T10:00:00+09:00",
+            "amounts": [1000],
+        }
+        scan_mail.save_state(st, self.path)
+        scan_mail.main(
+            ["mark", "--state", self.path, "--key", "k1", "--uploaded", "FILE9"]
+        )
+        up = scan_mail.load_state(self.path)["uploaded"]["k1"]
+        self.assertEqual(up["file_id"], "FILE9")
+        self.assertEqual(up["subject"], "領収書")
+        self.assertEqual(up["sender"], "shop@x.jp")
+        self.assertEqual(up["date"], "2026-07-01T10:00:00+09:00")
+        self.assertEqual(up["amounts"], [1000])
+        self.assertIn("at", up)
 
     def test_mark_failed_permanent(self):
         scan_mail.main(
@@ -309,6 +330,17 @@ class TestEmlx(unittest.TestCase):
             self.assertTrue(scan_mail.emlx_message_id(msg).startswith("<") or
                             scan_mail.emlx_message_id(msg) == "")
 
+    def test_pdf_parts_decodes_rfc2047_filename(self):
+        raw = ("=?UTF-8?Q?=E6=94=AF=E6=89=95=E9=80=9A=E7=9F=A5=E6=9B=B8=5F202?= "
+               "=?UTF-8?Q?607=5F=E6=BA=9D=E5=8F=A3.pdf?=")
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "10.emlx")
+            _make_emlx(p, {"Message-ID": "<m@x>"},
+                       [("application/pdf", raw, b"%PDF-1.4", "")])
+            parts = scan_mail.pdf_parts(scan_mail.read_emlx(p))
+            self.assertEqual(len(parts), 1)
+            self.assertEqual(parts[0][1], "支払通知書_202607_溝口.pdf")
+
 
 class TestScanCmd(unittest.TestCase):
     def _setup(self, d):
@@ -352,7 +384,7 @@ class TestScanCmd(unittest.TestCase):
                 scan_mail.main(["scan", "--state", statep, "--since", "2000-01-01"])
             self.assertEqual(len(saves), 2)
             self.assertIn("<abc@x>/1-r.pdf", saves[0]["pending"])
-            self.assertEqual(saves[0]["sources"]["<abc@x>"], 10)
+            self.assertEqual(saves[0]["sources"]["<abc@x>"], [10])
             self.assertIsNone(saves[0]["last_scan"])       # 1回目は cursor 未前進
             self.assertIsNotNone(saves[1]["last_scan"])    # 2回目で前進
 
@@ -437,56 +469,310 @@ class TestScanCmd(unittest.TestCase):
 
 
 class TestExtractCmd(unittest.TestCase):
-    def _state(self, statep, rowid=10, mid="<abc@x>"):
-        st = scan_mail.load_state(statep)
-        key = "%s/1-r.pdf" % mid
-        st["pending"][key] = {"subject": "領収書", "sender": "shop@x.jp",
-                              "date": "2026-07-01T10:00:00+09:00", "amounts": [1000]}
-        st["sources"][mid] = rowid
-        scan_mail.save_state(st, statep)
+    """message:// + Attachments/<ROWID>/ ポーリング方式(実 open/Mail なし)。"""
 
-    def test_extract_full_saves_file(self):
+    MID = "<abc@x>"
+
+    def _mail_root(self, d, rowids=(10,)):
+        root = os.path.join(d, "V10")
+        msg = os.path.join(root, "acct", "Messages")
+        os.makedirs(msg)
+        for rid in rowids:
+            open(os.path.join(msg, "%s.emlx" % rid), "wb").close()
+        return root
+
+    def _att(self, mail_root, rowid, part, name, payload=b"%PDF-1.4 x"):
+        p = os.path.join(mail_root, "acct", "Attachments", str(rowid), str(part))
+        os.makedirs(p, exist_ok=True)
+        fp = os.path.join(p, name)
+        with open(fp, "wb") as f:
+            f.write(payload)
+        return fp
+
+    def _state(self, statep, mid=None, rowids=None, keys=None):
+        mid = mid or self.MID
+        rowids = rowids if rowids is not None else [10]
+        st = scan_mail.load_state(statep)
+        st["sources"][mid] = list(rowids)
+        meta = {
+            "subject": "領収書",
+            "sender": "shop@x.jp",
+            "date": "2026-07-01T10:00:00+09:00",
+            "amounts": [1000],
+        }
+        if keys is None:
+            keys = [(1, "r.pdf")]
+        for idx, name in keys:
+            st["pending"]["%s/%d-%s" % (mid, idx, name)] = dict(meta)
+        scan_mail.save_state(st, statep)
+        return mid
+
+    def _clock(self):
+        now = [0.0]
+        sleeps = []
+
+        def mono():
+            return now[0]
+
+        def sleep(s):
+            sleeps.append(s)
+            now[0] += s
+
+        return mono, sleep, sleeps
+
+    def test_a_cached_copy_without_open(self):
         with tempfile.TemporaryDirectory() as d:
-            mail_root = os.path.join(d, "V10"); os.makedirs(os.path.join(mail_root, "acct/Messages"))
-            _make_emlx(os.path.join(mail_root, "acct/Messages/10.emlx"),
-                       {"Message-ID": "<abc@x>"}, [("application/pdf", "r.pdf", b"%PDF-1.4 X", "")])
-            statep = os.path.join(d, "state.json"); self._state(statep)
+            mail_root = self._mail_root(d)
+            src = self._att(mail_root, 10, 2, "r.pdf")
+            statep = os.path.join(d, "state.json")
+            mid = self._state(statep)
             outd = os.path.join(d, "out")
-            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), mock.patch("sys.stdout"):
-                rc = scan_mail.main(["extract", "--out", outd, "--state", statep, "<abc@x>"])
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch("subprocess.run") as run, \
+                 mock.patch("sys.stdout", new_callable=mock.MagicMock) as out, \
+                 mock.patch("sys.stderr"):
+                rc = scan_mail.main(
+                    ["extract", "--out", outd, "--state", statep, mid])
             self.assertEqual(rc, 0)
+            self.assertFalse(run.called)
+            self.assertTrue(os.path.isfile(src))  # 元は残る(コピー)
             saved = [f for f in os.listdir(outd) if f.endswith(".pdf")]
             self.assertEqual(len(saved), 1)
             self.assertTrue(saved[0].startswith("20260701_x.jp_r_"))
+            printed = "".join(c.args[0] for c in out.write.call_args_list if c.args)
+            self.assertIn("%s/1-r.pdf" % mid, json.loads(printed))
+
+    def test_b_poll_after_open_url_normalized(self):
+        with tempfile.TemporaryDirectory() as d:
+            mail_root = self._mail_root(d)
+            statep = os.path.join(d, "state.json")
+            mid = self._state(statep)
+            outd = os.path.join(d, "out")
+            mono, sleep, _ = self._clock()
+            n = [0]
+            opened = []
+
+            def fake_run(cmd, **kwargs):
+                opened.append(cmd)
+                return mock.Mock(returncode=0, stdout="", stderr="")
+
+            def fake_sleep(s):
+                sleep(s)
+                n[0] += 1
+                if n[0] == 2:
+                    self._att(mail_root, 10, 3, "r.pdf")
+
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch("subprocess.run", side_effect=fake_run), \
+                 mock.patch("time.monotonic", side_effect=mono), \
+                 mock.patch("time.sleep", side_effect=fake_sleep), \
+                 mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                rc = scan_mail.main(
+                    ["extract", "--out", outd, "--state", statep, mid])
+            self.assertEqual(rc, 0)
+            self.assertEqual(len(opened), 1)
+            self.assertEqual(opened[0][:1], ["open"])
+            url = opened[0][1]
+            self.assertTrue(url.startswith("message://%3C"))
+            self.assertTrue(url.endswith("%3E"))
+            self.assertNotIn("%3C%3C", url)
+            self.assertIn(urllib.parse.quote("abc@x", safe=""), url)
+            self.assertEqual(len([f for f in os.listdir(outd) if f.endswith(".pdf")]), 1)
+
+    def test_c_missing_sources_exits_nonzero(self):
+        with tempfile.TemporaryDirectory() as d:
+            mail_root = self._mail_root(d)
+            statep = os.path.join(d, "state.json")
+            st = scan_mail.load_state(statep)
+            st["pending"]["<nosrc@x>/1-r.pdf"] = {
+                "subject": "s", "sender": "a@b.jp", "date": "d", "amounts": []}
+            scan_mail.save_state(st, statep)
+            err = []
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch("subprocess.run") as run, \
+                 mock.patch("sys.stdout"), \
+                 mock.patch("sys.stderr", new_callable=mock.MagicMock) as se:
+                se.write = lambda s: err.append(s)
+                rc = scan_mail.main(
+                    ["extract", "--out", os.path.join(d, "out"),
+                     "--state", statep, "<nosrc@x>"])
+            self.assertEqual(rc, 1)
+            self.assertFalse(run.called)
+            self.assertTrue(any("再スキャン" in e or "sources" in e.lower() for e in err))
+
+    def test_d_poll_timeout_exits_nonzero(self):
+        with tempfile.TemporaryDirectory() as d:
+            mail_root = self._mail_root(d)
+            statep = os.path.join(d, "state.json")
+            mid = self._state(statep)
+            outd = os.path.join(d, "out")
+            mono, sleep, _ = self._clock()
+            err = []
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch("subprocess.run", return_value=mock.Mock(returncode=0)), \
+                 mock.patch("time.monotonic", side_effect=mono), \
+                 mock.patch("time.sleep", side_effect=sleep), \
+                 mock.patch("sys.stdout"), \
+                 mock.patch("sys.stderr", new_callable=mock.MagicMock) as se:
+                se.write = lambda s: err.append(s)
+                rc = scan_mail.main(
+                    ["extract", "--out", outd, "--state", statep, mid])
+            self.assertEqual(rc, 1)
+            self.assertTrue(any("timeout" in e.lower() or "タイムアウト" in e
+                                or "現れ" in e for e in err))
+
+    def test_e_non_pdf_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            mail_root = self._mail_root(d)
+            self._att(mail_root, 10, 2, "r.pdf", payload=b"NOTAPDF")
+            statep = os.path.join(d, "state.json")
+            mid = self._state(statep)
+            outd = os.path.join(d, "out")
+            err = []
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch("subprocess.run") as run, \
+                 mock.patch("sys.stdout"), \
+                 mock.patch("sys.stderr", new_callable=mock.MagicMock) as se:
+                se.write = lambda s: err.append(s)
+                rc = scan_mail.main(
+                    ["extract", "--out", outd, "--state", statep, mid])
+            self.assertEqual(rc, 1)
+            self.assertFalse(run.called)
+            self.assertFalse(any(f.endswith(".pdf") for f in os.listdir(outd)
+                                 if os.path.isfile(os.path.join(outd, f))))
+            self.assertTrue(any("pdf" in e.lower() or "PDF" in e for e in err))
+
+    def test_f_same_name_parts_map_by_index_order(self):
+        with tempfile.TemporaryDirectory() as d:
+            mail_root = self._mail_root(d)
+            self._att(mail_root, 10, 2, "r.pdf", payload=b"%PDF-part2")
+            self._att(mail_root, 10, 4, "r.pdf", payload=b"%PDF-part4")
+            statep = os.path.join(d, "state.json")
+            mid = self._state(statep, keys=[(1, "r.pdf"), (2, "r.pdf")])
+            outd = os.path.join(d, "out")
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch("subprocess.run") as run, \
+                 mock.patch("sys.stdout"):
+                rc = scan_mail.main(
+                    ["extract", "--out", outd, "--state", statep, mid])
+            self.assertEqual(rc, 0)
+            self.assertFalse(run.called)
+            saved = sorted(f for f in os.listdir(outd) if f.endswith(".pdf"))
+            self.assertEqual(len(saved), 2)
+            bodies = []
+            for f in saved:
+                with open(os.path.join(outd, f), "rb") as fh:
+                    bodies.append(fh.read())
+            self.assertEqual(sorted(bodies), [b"%PDF-part2", b"%PDF-part4"])
+
+    def test_g_secondary_rowid_attachments(self):
+        with tempfile.TemporaryDirectory() as d:
+            mail_root = self._mail_root(d, rowids=(10, 20))
+            self._att(mail_root, 20, 2, "r.pdf")  # 非プライマリ側のみ
+            statep = os.path.join(d, "state.json")
+            mid = self._state(statep, rowids=[10, 20])
+            outd = os.path.join(d, "out")
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch("subprocess.run") as run, \
+                 mock.patch("sys.stdout"):
+                rc = scan_mail.main(
+                    ["extract", "--out", outd, "--state", statep, mid])
+            self.assertEqual(rc, 0)
+            self.assertFalse(run.called)
+            self.assertEqual(len([f for f in os.listdir(outd) if f.endswith(".pdf")]), 1)
+
+    def test_h_load_state_normalizes_scalar_sources(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "state.json")
+            with open(p, "w") as f:
+                json.dump({
+                    "last_scan": None,
+                    "pending": {}, "uploaded": {}, "failed": {},
+                    "discarded": {}, "skipped": {},
+                    "sources": {"<old@x>": 42},
+                }, f)
+            st = scan_mail.load_state(p)
+            self.assertEqual(st["sources"]["<old@x>"], [42])
+
+    def test_i_broken_filename_fallback(self):
+        with tempfile.TemporaryDirectory() as d:
+            mail_root = self._mail_root(d)
+            self._att(mail_root, 10, 2, "?????_202 607_??.pdf")
+            statep = os.path.join(d, "state.json")
+            mid = self._state(statep, keys=[(1, "領収書_202607.pdf")])
+            outd = os.path.join(d, "out")
+            mono, sleep, _ = self._clock()
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch("subprocess.run") as run, \
+                 mock.patch("time.monotonic", side_effect=mono), \
+                 mock.patch("time.sleep", side_effect=sleep), \
+                 mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                rc = scan_mail.main(
+                    ["extract", "--out", outd, "--state", statep, mid])
+            self.assertEqual(rc, 0)
+            self.assertFalse(run.called)
+            saved = [f for f in os.listdir(outd) if f.endswith(".pdf")]
+            self.assertEqual(len(saved), 1)
+            self.assertTrue(saved[0].startswith("20260701_x.jp_"))
             with open(os.path.join(outd, saved[0]), "rb") as f:
                 self.assertTrue(f.read().startswith(b"%PDF"))
 
-    def test_extract_partial_skips_with_error(self):
+    def test_j_ambiguous_count_in_one_copy_fails(self):
+        # 照合: 期待1・同一コピー内 PDF 2 → 割当てない
+        targets = [(1, "expect.pdf", "out.pdf")]
+        copies = [[(2, "/p/2/a.pdf", "a.pdf"), (3, "/p/3/b.pdf", "b.pdf")]]
+        asg, rem = scan_mail.match_targets(targets, copies)
+        self.assertEqual(asg, [])
+        self.assertEqual(rem, targets)
         with tempfile.TemporaryDirectory() as d:
-            mail_root = os.path.join(d, "V10"); os.makedirs(os.path.join(mail_root, "acct/Messages"))
-            _make_emlx(os.path.join(mail_root, "acct/Messages/10.partial.emlx"),
-                       {"Message-ID": "<abc@x>"},
-                       [("application/pdf", "r.pdf", None, "X-Apple-Content-Length: 999")])
-            statep = os.path.join(d, "state.json"); self._state(statep)
-            outd = os.path.join(d, "out")
-            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
-                 mock.patch("sys.stdout"), mock.patch("sys.stderr"):
-                rc = scan_mail.main(["extract", "--out", outd, "--state", statep, "<abc@x>"])
-            self.assertEqual(rc, 1)
-            self.assertFalse(os.path.isdir(outd) and any(f.endswith(".pdf") for f in os.listdir(outd)))
-
-    def test_extract_missing_source_exits_nonzero(self):
-        with tempfile.TemporaryDirectory() as d:
-            mail_root = os.path.join(d, "V10"); os.makedirs(mail_root)
+            mail_root = self._mail_root(d)
+            self._att(mail_root, 10, 2, "a.pdf", payload=b"%PDF-a")
+            self._att(mail_root, 10, 3, "b.pdf", payload=b"%PDF-b")
             statep = os.path.join(d, "state.json")
-            st = scan_mail.load_state(statep)
-            st["pending"]["<zzz@x>/1-r.pdf"] = {"subject": "", "sender": "", "date": "", "amounts": []}
-            scan_mail.save_state(st, statep)   # sources に <zzz@x> なし
+            mid = self._state(statep, keys=[(1, "expect.pdf")])
+            outd = os.path.join(d, "out")
+            mono, sleep, _ = self._clock()
+            err = []
             with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
-                 mock.patch("sys.stdout"), mock.patch("sys.stderr"):
-                rc = scan_mail.main(["extract", "--out", os.path.join(d, "out"),
-                                     "--state", statep, "<zzz@x>"])
+                 mock.patch("subprocess.run", return_value=mock.Mock(returncode=0)), \
+                 mock.patch("time.monotonic", side_effect=mono), \
+                 mock.patch("time.sleep", side_effect=sleep), \
+                 mock.patch("sys.stdout"), \
+                 mock.patch("sys.stderr", new_callable=mock.MagicMock) as se:
+                se.write = lambda s: err.append(s)
+                rc = scan_mail.main(
+                    ["extract", "--out", outd, "--state", statep, mid])
             self.assertEqual(rc, 1)
+            self.assertFalse(any(f.endswith(".pdf") for f in os.listdir(outd)
+                                 if os.path.isfile(os.path.join(outd, f))))
+            self.assertTrue(any(err))
+
+    def test_k_no_cross_copy_pooling(self):
+        # 照合: コピー横断プール禁止(各コピー1件・期待2)
+        targets = [(1, "x.pdf", "o1.pdf"), (2, "y.pdf", "o2.pdf")]
+        copies = [[(2, "/10/2/a.pdf", "a.pdf")], [(2, "/20/2/b.pdf", "b.pdf")]]
+        asg, rem = scan_mail.match_targets(targets, copies)
+        self.assertEqual(asg, [])
+        self.assertEqual(len(rem), 2)
+        with tempfile.TemporaryDirectory() as d:
+            mail_root = self._mail_root(d, rowids=(10, 20))
+            self._att(mail_root, 10, 2, "a.pdf")
+            self._att(mail_root, 20, 2, "b.pdf")
+            statep = os.path.join(d, "state.json")
+            mid = self._state(statep, rowids=[10, 20],
+                              keys=[(1, "x.pdf"), (2, "y.pdf")])
+            outd = os.path.join(d, "out")
+            mono, sleep, _ = self._clock()
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch("subprocess.run", return_value=mock.Mock(returncode=0)), \
+                 mock.patch("time.monotonic", side_effect=mono), \
+                 mock.patch("time.sleep", side_effect=sleep), \
+                 mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                rc = scan_mail.main(
+                    ["extract", "--out", outd, "--state", statep, mid])
+            self.assertEqual(rc, 1)
+            self.assertFalse(any(f.endswith(".pdf") for f in os.listdir(outd)
+                                 if os.path.isfile(os.path.join(outd, f))))
 
 
 if __name__ == "__main__":
