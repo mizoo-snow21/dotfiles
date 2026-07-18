@@ -1,106 +1,118 @@
 ---
 name: mail2mf
-description: Mail.app の決済系メール(PDF 証憑付き)をマネーフォワード クラウドBox へアップロードし、決済明細との突合レポートを出す。「決済メールをマネフォに」「証憑アップロード」「mail2mf」等で起動。
+description: Upload payment-related email evidence (PDF receipts/invoices) from Mail.app to Money Forward Cloud Box and reconcile against payment transactions. Trigger on "決済メールをマネフォに", "証憑アップロード", "mail2mf", "upload receipts to Money Forward", etc.
 ---
 
-# mail2mf — 決済メール証憑 → クラウドBox 連携
+# mail2mf — Payment email evidence → Money Forward Cloud Box
 
-スクリプト: このファイルと同じディレクトリの `scripts/scan_mail.py` と `scripts/mf_api.py`。
-以降 `SKILL_DIR` = このファイルのあるディレクトリ。
+Scripts live next to this file: `scripts/scan_mail.py` and `scripts/mf_api.py`.
+Below, `SKILL_DIR` = the directory containing this file.
 
-スキャンは Envelope Index(SQLite)を read-only で直読み(Apple Events 不使用・高速)。
-抽出は `message://` URL で Mail にメッセージを開かせて添付を自動ダウンロードさせ、
-`Attachments/<ROWID>/` に現れたファイルを拾う(未 DL の添付も自動 DL・アーカイブ済み
-メールも可・1メッセージ ~15s)。**フルディスクアクセス(FDA)権限が必要**。
-認証情報は macOS Keychain(`mail2mf-mfc`)。
+Scanning reads Mail's Envelope Index (SQLite) directly, read-only (no Apple Events — fast
+even on huge inboxes). Extraction opens each message via a `message://` URL so Mail
+auto-downloads the attachments, then picks them up from `Attachments/<ROWID>/`
+(works for not-yet-downloaded and archived mail; ~15s per message).
+**Full Disk Access (FDA) is required** for the terminal app.
+Credentials live in the macOS Keychain (service `mail2mf-mfc`).
 
-## 手順
+## Procedure
 
-### 1. スキャン
+### 1. Scan
 
 ```bash
 python3 "$SKILL_DIR/scripts/scan_mail.py" scan
 ```
 
-- 既定範囲は今年の1月1日から(state があれば前回スキャン以降)。ユーザーが期間を
-  指定した場合のみ `--since YYYY-MM-DD` を付ける。
-- 出力 JSON の `candidates` が空なら「新しい候補なし」と報告して手順 4 へ。
+- Default range is January 1 of the current year (or since the last scan when state
+  exists). Add `--since YYYY-MM-DD` only when the user specifies a range.
+- If the output JSON's `candidates` is empty, report "no new candidates" and go to step 4.
 
-### 2. 判定と承認(必須ゲート)
+### 2. Classify and get approval (mandatory gate)
 
-candidates の各件を**意味的に**分類する: 決済系(領収書・請求書・利用明細・
-注文確認に伴う適格請求書など)か、非決済(広告・物件情報・ニュースレター等)か。
-金額候補(`amounts`)・件名・差出人を根拠に判断する。
+Classify each candidate **semantically**: payment-related (receipt, invoice, usage
+statement, qualified invoice attached to an order confirmation, …) vs. non-payment
+(ads, real-estate listings, newsletters, …). Base the judgment on the amount
+candidates (`amounts`), subject, and sender.
 
-- 結果を表で提示: | 判定 | 件名 | 差出人 | 日付 | 金額候補 | status |
-- `status` が `failed_retry` の行は失敗理由も表示する。
-- **ユーザーの承認を得るまでアップロードしない。**
-- 非決済と判定されユーザーが同意した候補は pending から除去:
-  `python3 "$SKILL_DIR/scripts/scan_mail.py" discard <key>...`
+- Present the result as a table: | verdict | subject | sender | date | amounts | status |
+- For rows with `status: failed_retry`, also show the failure reason.
+- **Never upload before the user approves.**
+- For candidates judged non-payment that the user agrees to drop, remove them from
+  pending: `python3 "$SKILL_DIR/scripts/scan_mail.py" discard <key>...`
 
-### 3. 抽出とアップロード
+### 3. Extract and upload
 
-承認された候補について message_id ごとに:
+For each approved message_id:
 
 ```bash
 python3 "$SKILL_DIR/scripts/scan_mail.py" extract --out ~/.local/state/mail2mf/downloads "<message_id>" ...
-python3 "$SKILL_DIR/scripts/mf_api.py" upload <保存されたファイル>...
+python3 "$SKILL_DIR/scripts/mf_api.py" upload <saved files>...
 ```
 
-- extract は `message://` で Mail にメッセージを開かせて添付を自動 DL させ、
-  `Attachments/<ROWID>/` をポーリングして拾う(1メッセージ ~15s、タイムアウト 90s。
-  Mail は `open` が自動起動する)。エラー(非0)時の stderr はそのまま案内に使える:
-  - `sources に ... がありません(再スキャンしてください)` → `scan` を再実行
+- Extraction opens the message via `message://` so Mail auto-downloads the attachment
+  bodies, then polls `Attachments/<ROWID>/` (~15s per message, 90s timeout; `open`
+  launches Mail automatically). On failure (non-zero exit), the stderr message tells
+  you what to do — the scripts emit these literal Japanese strings:
+  - `sources に ... がありません(再スキャンしてください)` → run `scan` again
   - `Attachments バケットを解決できません` / `Attachments 照合タイムアウト/曖昧` →
-    再実行で直ることが多い。続く場合はそのメールを Mail で開いてから再実行
-  - `Mail で該当メール(件名)を開いてから再実行してください` → RFC Message-ID の無い
-    稀なメール。案内どおり手動で開いてから再実行
-  いずれも該当添付は failed(非 permanent)として残り再試行対象。
-- upload の結果 JSON を見て 1 件ずつ state を確定する:
-  - 成功: `scan_mail.py mark --key "<key>" --uploaded <file_id>`
-    (証憑メタ〔金額・日付・差出人・件名〕は uploaded エントリに保存され、後日の突合に使える)
-  - 失敗: `scan_mail.py mark --key "<key>" --failed "<error>"`(402/413 は `--permanent` 付き)
-- アップロード前の重複照合(state 消失時の最終防衛線): ファイル名はキー由来で決定的
-  (同一添付は常に同名)なので、アップ予定の各ファイルについて
-  `mf_api.py list-box --name "<final_name>"` で**完全名のサーバー側検索**を行う
-  (file_name フィルタは実 API で動作確認済み。ページング上限に依存しない)。
-  ヒットしたらアップロードせず、その file_id で mark --uploaded に消し込む。
-  **state が新規/作り直しの回は必ず全ファイルで実施**。通常回は省略可
-  (state の添付キー記録が一次防衛線)。
+    usually resolved by re-running; if it persists, open that mail in Mail.app, then retry
+  - `Mail で該当メール(件名)を開いてから再実行してください` → rare mail without an
+    RFC Message-ID; open it manually in Mail.app as instructed, then retry
+  In all cases the attachment stays in `failed` (non-permanent) and will be retried.
+- Duplicate check before upload (last line of defense if state is lost): filenames are
+  deterministic (derived from the attachment key), so for each file to be uploaded run
+  `mf_api.py list-box --name "<final_name>"` — a server-side exact-name search
+  (`file_name` filter, verified against the real API; independent of pagination limits).
+  On a hit, skip the upload and settle it with that file_id via `mark --uploaded`.
+  **Mandatory for every file when the state is new or was rebuilt**; optional otherwise
+  (the state's attachment-key record is the primary defense).
+- Settle state one item at a time from the upload result JSON:
+  - success: `scan_mail.py mark --key "<key>" --uploaded <file_id>`
+    (evidence metadata — amount/date/sender/subject — is preserved on the uploaded
+    entry for later reconciliation)
+  - failure: `scan_mail.py mark --key "<key>" --failed "<error>"` (add `--permanent`
+    for 402/413)
 
-### 4. 突合レポート
+### 4. Reconciliation report
 
 ```bash
-python3 "$SKILL_DIR/scripts/mf_api.py" transactions --from <期間開始> --to <今日>
+python3 "$SKILL_DIR/scripts/mf_api.py" transactions --from <range start> --to <today>
 ```
 
-明細(決済)とアップロード済み証憑を突合し、Markdown レポートを出す。証憑側は
-state.json の `uploaded` エントリ(各キーに保存された金額・日付・差出人・件名)を証憑集合と
-みなす(今回アップ分だけでなく過去にアップ済みの分も含めて突合できる):
+Reconcile transactions (payments) against uploaded evidence and output a Markdown
+report. The evidence set is the state file's `uploaded` entries (each carries amount /
+date / sender / subject), so evidence uploaded in past runs is included too:
 
-- **対応あり**: 明細と証憑が金額±0・日付±3日で一致(取引内容と差出人の意味一致も加味)
-- **証憑なし決済**: 対応する証憑が見つからない明細(`journalizing_statuses` が
-  `none` のものは「未仕訳」と明記)
-- **明細なし証憑**: どの明細とも一致しない証憑
+- **Matched**: transaction and evidence agree on amount ±0 and date ±3 days
+  (also weigh semantic match of description vs. sender)
+- **Payments without evidence**: transactions with no matching evidence
+  (mark those with `journalizing_statuses: none` as "未仕訳" / not yet journalized)
+- **Evidence without payment**: evidence matching no transaction
 
-レポート末尾に必ず添える案内:
+Always end the report with this guidance:
 「仕訳の確定はマネーフォワード クラウド会計の [自動で仕訳 > 連携サービスから入力] と
 [クラウドBox の仕訳候補] 画面で承認してください。証憑の添付はこのルートでのみ行われます。」
+(Journal entries are finalized in Money Forward Cloud Accounting's journal-candidate
+screens; PDF attachment to journal entries happens only through that route.)
 
-### 5. エラー対応
+### 5. Error handling
 
-- `refresh token expired` → `mf_api.py auth-url` で URL を生成しユーザーに提示 →
-  ブラウザで許可後、`localhost:3118` のエラーページの URL を貼ってもらい
-  `mf_api.py auth-exchange "<callback_url>"`。
-- Envelope Index が開けない/フルディスクアクセス未許可 → システム設定 > プライバシーと
-  セキュリティ > フルディスクアクセス で端末アプリ(Ghostty 等)に許可するよう案内。
-- extract の失敗 → 手順3の stderr 対応表に従う(再スキャン/再実行/対象メールを Mail で
-  開く)。該当添付は failed(非 permanent)で残るので再試行対象。
-- MCP/明細取得の失敗 → アップロードまでで完了とし、レポートは「突合スキップ」と明記。
+- `refresh token expired` → generate a URL with `mf_api.py auth-url` and show it to the
+  user → after they approve in the browser, have them paste the `localhost:3118` error
+  page URL and run `mf_api.py auth-exchange "<callback_url>"`.
+- Envelope Index unreadable / FDA not granted → tell the user to grant Full Disk Access
+  to the terminal app (Ghostty etc.) in System Settings > Privacy & Security.
+- Extraction failures → follow the stderr table in step 3 (rescan / retry / open the
+  mail in Mail.app). The attachment stays in `failed` (non-permanent) for retry.
+- Transactions/MCP fetch failure → finish at the upload stage and mark the report as
+  "reconciliation skipped".
 
-## 注意
+## Notes
 
-- 実行状態は `~/.local/state/mail2mf/state.json`(pending/uploaded/failed/discarded/sources/skipped)。
-  手順 4 の突合ではこの `uploaded` を証憑集合として読む。
-- 秘匿情報は Keychain(`mail2mf-mfc`)。トークンや client_secret を表示・保存しない。
-- Box への削除操作は存在しない(アップロードのみ)。誤アップは MF 画面から削除してもらう。
+- Runtime state: `~/.local/state/mail2mf/state.json`
+  (pending/uploaded/failed/discarded/sources/skipped). Step 4 reads `uploaded` as the
+  evidence set.
+- Secrets stay in the Keychain (`mail2mf-mfc`). Never display or store tokens or the
+  client_secret.
+- There is no delete operation for Box (upload only). If something is uploaded by
+  mistake, the user removes it in the MF Box UI.
