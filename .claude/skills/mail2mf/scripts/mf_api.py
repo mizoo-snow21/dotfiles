@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""mail2mf: マネーフォワード クラウド API クライアント。
+
+サブコマンド:
+  upload <file>...              PDF をクラウドBox へアップロード
+  list-box [--limit N]          Box ファイル一覧(重複チェック用)
+  transactions --from D --to D  決済明細を MCP 経由で取得
+  auth-url                      再認可用 authorize URL 生成(PKCE)
+  auth-exchange <callback_url>  コールバック URL をトークンに交換
+
+秘匿情報は macOS Keychain のみ。アクセストークンはプロセス内でだけ保持する。
+"""
+
+import argparse
+import getpass
+import json
+import subprocess
+import urllib.error
+import urllib.parse
+import urllib.request
+
+KEYCHAIN_SERVICE = "mail2mf-mfc"
+PKCE_SERVICE = "mail2mf-mfc-pkce"
+TOKEN_URL = "https://api.biz.moneyforward.com/token"
+AUTHORIZE_URL = "https://api.biz.moneyforward.com/authorize"
+BOX_URL = "https://api.box.moneyforward.com/v1/files"
+MCP_URL = "https://beta.mcp.developers.biz.moneyforward.com/mcp/ca/v3"
+REDIRECT_URI = "http://localhost:3118/callback"
+SCOPES = " ".join(
+    [
+        "mfc/accounting/%s" % s
+        for s in [
+            "offices.read",
+            "accounts.read",
+            "departments.read",
+            "journal.read",
+            "journal.write",
+            "report.read",
+            "taxes.read",
+            "trade_partners.read",
+            "trade_partners.write",
+            "connected_account.read",
+            "transaction.read",
+            "transaction.write",
+        ]
+    ]
+    + ["mfc/box/files.read", "mfc/box/files.write"]
+)
+
+
+def keychain_read(service):
+    cp = subprocess.run(
+        ["security", "find-generic-password", "-s", service, "-w"],
+        capture_output=True,
+        text=True,
+    )
+    if cp.returncode != 0:
+        raise SystemExit("keychain read failed (%s): %s" % (service, cp.stderr.strip()))
+    return json.loads(cp.stdout)
+
+
+def keychain_write(service, data):
+    cp = subprocess.run(
+        [
+            "security",
+            "add-generic-password",
+            "-a",
+            getpass.getuser(),
+            "-s",
+            service,
+            "-w",
+            json.dumps(data),
+            "-U",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if cp.returncode != 0:
+        raise SystemExit(
+            "keychain write failed (%s): %s" % (service, cp.stderr.strip())
+        )
+
+
+def keychain_delete(service):
+    subprocess.run(
+        ["security", "delete-generic-password", "-s", service],
+        capture_output=True,
+        text=True,
+    )
+
+
+def http(method, url, headers, data):
+    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, dict(r.headers), r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, dict(e.headers), e.read()
+
+
+def get_access_token():
+    creds = keychain_read(KEYCHAIN_SERVICE)
+    body = urllib.parse.urlencode(
+        {
+            "grant_type": "refresh_token",
+            "refresh_token": creds["refresh_token"],
+            "client_id": creds["client_id"],
+            "client_secret": creds["client_secret"],
+        }
+    ).encode()
+    status, _, resp = http(
+        "POST", TOKEN_URL, {"Content-Type": "application/x-www-form-urlencoded"}, body
+    )
+    try:
+        tok = json.loads(resp)
+    except ValueError:
+        raise SystemExit("token endpoint returned non-JSON (HTTP %d)" % status)
+    if status != 200:
+        if tok.get("error") == "invalid_grant":
+            raise SystemExit(
+                "refresh token expired. Run 'mf_api.py auth-url' to re-authorize."
+            )
+        raise SystemExit(
+            "token refresh failed: HTTP %d %s" % (status, tok.get("error", ""))
+        )
+    if tok.get("refresh_token") and tok["refresh_token"] != creds["refresh_token"]:
+        creds["refresh_token"] = tok["refresh_token"]
+        keychain_write(KEYCHAIN_SERVICE, creds)
+    return tok["access_token"]
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="mf_api.py")
+    parser.add_subparsers(dest="cmd")
+    parser.parse_args(argv)
+    parser.error("no command")
+
+
+if __name__ == "__main__":
+    main()
