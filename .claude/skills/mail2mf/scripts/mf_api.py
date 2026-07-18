@@ -12,7 +12,9 @@
 """
 
 import argparse
+import base64
 import getpass
+import hashlib
 import json
 import os
 import secrets
@@ -314,6 +316,79 @@ def cmd_transactions(args):
     return 0
 
 
+def cmd_auth_url(args):
+    creds = keychain_read(KEYCHAIN_SERVICE)
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(48)).decode().rstrip("=")
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+        .decode()
+        .rstrip("=")
+    )
+    state = base64.urlsafe_b64encode(secrets.token_bytes(24)).decode().rstrip("=")
+    keychain_write(PKCE_SERVICE, {"verifier": verifier, "state": state})
+    url = (
+        AUTHORIZE_URL
+        + "?"
+        + urllib.parse.urlencode(
+            {
+                "response_type": "code",
+                "client_id": creds["client_id"],
+                "redirect_uri": REDIRECT_URI,
+                "scope": SCOPES,
+                "state": state,
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+            }
+        )
+    )
+    print(url)
+    return 0
+
+
+def cmd_auth_exchange(args):
+    q = urllib.parse.parse_qs(urllib.parse.urlparse(args.callback_url).query)
+    pk = keychain_read(PKCE_SERVICE)
+    if q.get("state", [None])[0] != pk.get("state"):
+        keychain_delete(PKCE_SERVICE)
+        raise SystemExit("OAuth state mismatch — aborted (PKCE entry discarded)")
+    code = q.get("code", [None])[0]
+    if not code:
+        keychain_delete(PKCE_SERVICE)
+        err = q.get("error", [None])[0]
+        raise SystemExit(
+            "OAuth authorization failed: %s" % err
+            if err
+            else "OAuth callback missing code parameter"
+        )
+    creds = keychain_read(KEYCHAIN_SERVICE)
+    body = urllib.parse.urlencode(
+        {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": REDIRECT_URI,
+            "client_id": creds["client_id"],
+            "client_secret": creds["client_secret"],
+            "code_verifier": pk["verifier"],
+        }
+    ).encode()
+    status, _, resp = http(
+        "POST", TOKEN_URL, {"Content-Type": "application/x-www-form-urlencoded"}, body
+    )
+    try:
+        tok = json.loads(resp)
+    except ValueError:
+        raise SystemExit("token exchange returned non-JSON (HTTP %d)" % status)
+    if status != 200:
+        raise SystemExit("token exchange failed: HTTP %d" % status)
+    if "refresh_token" not in tok:
+        raise SystemExit("token exchange response missing refresh_token")
+    creds["refresh_token"] = tok["refresh_token"]
+    keychain_write(KEYCHAIN_SERVICE, creds)
+    keychain_delete(PKCE_SERVICE)
+    print("re-authorized OK. granted scopes: %s" % tok.get("scope", ""))
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="mf_api.py")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -327,6 +402,11 @@ def main(argv=None):
     p.add_argument("--from", required=True)
     p.add_argument("--to", dest="to", required=True)
     p.set_defaults(fn=cmd_transactions)
+    p = sub.add_parser("auth-url")
+    p.set_defaults(fn=cmd_auth_url)
+    p = sub.add_parser("auth-exchange")
+    p.add_argument("callback_url")
+    p.set_defaults(fn=cmd_auth_exchange)
     args = parser.parse_args(argv)
     return args.fn(args)
 

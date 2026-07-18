@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import unittest
+import urllib.parse
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
@@ -306,6 +307,121 @@ class TestMcp(unittest.TestCase):
             out = mf_api.mcp_call("mfc_ca_getTransactions", {})
         self.assertEqual(out, {"transactions": []})
         self.assertEqual(h.call_args_list[2][0][2].get("Mcp-Session-Id"), "S1")
+
+
+class TestAuth(unittest.TestCase):
+    def test_auth_url_persists_pkce_and_prints_url(self):
+        stored = {}
+        with (
+            mock.patch.object(
+                mf_api,
+                "keychain_read",
+                return_value={
+                    "client_id": "cid",
+                    "client_secret": "sec",
+                    "refresh_token": "rt",
+                },
+            ),
+            mock.patch.object(
+                mf_api, "keychain_write", side_effect=lambda s, d: stored.update({s: d})
+            ),
+            mock.patch("sys.stdout") as out,
+        ):
+            mf_api.cmd_auth_url(None)
+        pk = stored[mf_api.PKCE_SERVICE]
+        self.assertIn("verifier", pk)
+        self.assertIn("state", pk)
+        printed = "".join(c[0][0] for c in out.write.call_args_list)
+        self.assertIn(mf_api.AUTHORIZE_URL, printed)
+        self.assertIn("code_challenge=", printed)
+        self.assertIn(pk["state"], printed)
+
+    def test_auth_exchange_state_mismatch_aborts_and_deletes(self):
+        with (
+            mock.patch.object(
+                mf_api, "keychain_read", return_value={"verifier": "v", "state": "GOOD"}
+            ),
+            mock.patch.object(mf_api, "keychain_delete") as kd,
+        ):
+            args = mock.Mock(
+                callback_url="http://localhost:3118/callback?code=c&state=BAD"
+            )
+            with self.assertRaises(SystemExit) as cm:
+                mf_api.cmd_auth_exchange(args)
+            self.assertIn("state", str(cm.exception))
+            kd.assert_called_once_with(mf_api.PKCE_SERVICE)
+
+    def test_auth_exchange_success_updates_refresh_token(self):
+        def kread(service):
+            if service == mf_api.PKCE_SERVICE:
+                return {"verifier": "v", "state": "S"}
+            return {"client_id": "cid", "client_secret": "sec", "refresh_token": "old"}
+
+        resp = json.dumps(
+            {
+                "access_token": "at",
+                "refresh_token": "new",
+                "scope": "mfc/box/files.write",
+            }
+        ).encode()
+        written = {}
+        with (
+            mock.patch.object(mf_api, "keychain_read", side_effect=kread),
+            mock.patch.object(
+                mf_api,
+                "keychain_write",
+                side_effect=lambda s, d: written.update({s: d}),
+            ),
+            mock.patch.object(mf_api, "keychain_delete") as kd,
+            mock.patch.object(mf_api, "http", return_value=(200, {}, resp)) as h,
+        ):
+            args = mock.Mock(
+                callback_url="http://localhost:3118/callback?code=c&state=S"
+            )
+            mf_api.cmd_auth_exchange(args)
+        self.assertEqual(written[mf_api.KEYCHAIN_SERVICE]["refresh_token"], "new")
+        kd.assert_called_once_with(mf_api.PKCE_SERVICE)
+        sent = urllib.parse.parse_qs(h.call_args[0][3].decode())
+        self.assertEqual(sent["code_verifier"], ["v"])
+        self.assertEqual(sent["code"], ["c"])
+
+    def test_auth_exchange_oauth_error_exits_and_deletes_pkce(self):
+        with (
+            mock.patch.object(
+                mf_api, "keychain_read", return_value={"verifier": "v", "state": "S"}
+            ),
+            mock.patch.object(mf_api, "keychain_delete") as kd,
+            mock.patch.object(mf_api, "keychain_write") as kw,
+        ):
+            args = mock.Mock(
+                callback_url="http://localhost:3118/callback?error=access_denied&state=S"
+            )
+            with self.assertRaises(SystemExit) as cm:
+                mf_api.cmd_auth_exchange(args)
+            self.assertIn("access_denied", str(cm.exception))
+            kd.assert_called_once_with(mf_api.PKCE_SERVICE)
+            kw.assert_not_called()
+
+    def test_auth_exchange_missing_refresh_token_exits_without_write(self):
+        def kread(service):
+            if service == mf_api.PKCE_SERVICE:
+                return {"verifier": "v", "state": "S"}
+            return {"client_id": "cid", "client_secret": "sec", "refresh_token": "old"}
+
+        resp = json.dumps({"access_token": "at", "scope": "x"}).encode()
+        with (
+            mock.patch.object(mf_api, "keychain_read", side_effect=kread),
+            mock.patch.object(mf_api, "keychain_write") as kw,
+            mock.patch.object(mf_api, "keychain_delete"),
+            mock.patch.object(mf_api, "http", return_value=(200, {}, resp)),
+        ):
+            args = mock.Mock(
+                callback_url="http://localhost:3118/callback?code=c&state=S"
+            )
+            with self.assertRaises(SystemExit) as cm:
+                mf_api.cmd_auth_exchange(args)
+            self.assertIn("refresh_token", str(cm.exception))
+            kw.assert_not_called()
 
 
 if __name__ == "__main__":
