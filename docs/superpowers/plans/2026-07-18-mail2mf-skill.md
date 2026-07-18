@@ -19,7 +19,16 @@
 - ファイル配置: `~/dotfiles/.claude/skills/mail2mf/`(リポジトリ内パス `.claude/skills/mail2mf/`)。
 - state ファイル: `~/.local/state/mail2mf/state.json`。書き込みは tmp + `os.replace` のアトミック置換。
 - テスト実行はすべて: `cd ~/dotfiles/.claude/skills/mail2mf && python3 -m unittest discover -s tests -v`
-- 添付キー = `<message_id>/<添付順位>-<添付名>`(順位は全添付中の 1 始まり)。
+- 添付キー = `<message_id>/<添付順位>-<添付名>`。`message_id` は RFC Message-ID
+  (`.emlx` ヘッダ由来。無ければ `rowid:<ROWID>`)。添付順位は `.emlx` の MIME パートを
+  walk した順で、ファイル名を持つパート中の 1 始まり。
+- Mail データ源(2026-07-19 改訂): Envelope Index SQLite を直読み。
+  `MAIL_ROOT = ~/Library/Mail/V10`、`ENVELOPE_INDEX = <MAIL_ROOT>/MailData/Envelope Index`。
+  開き方は **ロックする read-only 接続** `sqlite3.connect("file:<path>?mode=ro", uri=True)`
+  (WAL 一貫スナップショット。`immutable=1` やファイルコピーは不可)。FDA 権限必須(付与済み)。
+  PDF 実体は Mail が DL 済みの full `.emlx` からのみ取得可(未 DL の `.partial.emlx` は skip+案内)。
+- state に `sources`(`message_id` → Envelope Index の ROWID〔整数〕)を追加。scan が記録、
+  extract が ROWID→現在の `.emlx` を再解決する(path は保存しない=partial→full で陳腐化するため)。
 - コミットメッセージ末尾に `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`。
 - **タスク完了順序(SDD・全タスク共通)**: 実装 → テスト green → **Task Review
   (superpowers:subagent-driven-development の task-reviewer で ✅ Approved)→ その後で
@@ -1064,203 +1073,473 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 6: scan_mail.py — Mail.app 連携(scan / extract)
+### Task 6: scan_mail.py — Envelope Index スキャン + .emlx 抽出
 
 **Files:**
 - Modify: `.claude/skills/mail2mf/scripts/scan_mail.py`
 - Modify: `.claude/skills/mail2mf/tests/test_scan_mail.py`
 
 **Interfaces:**
-- Consumes: Task 5 の全関数
-- Produces: CLI `scan [--since YYYY-MM-DD] [--state PATH]`(stdout: `{"since": ..., "candidates": [...]}`)/ CLI `extract --out DIR [--state PATH] <message_id>...`(stdout: `{"<key>": "<saved_path>"}`)。内部関数 `run_jxa_scan(since_iso) -> list[dict]`・`parse_jxa_output(text) -> list[dict]`。
+- Consumes: Task 5 の全関数(`extract_amounts`, `load_state`, `save_state`, `attachment_key`, `hash8`, `sender_domain`, `final_name`, `build_candidates`, `cmd_mark`, `cmd_discard`)。
+- Produces:
+  - CLI `scan [--since YYYY-MM-DD] [--state PATH]`(stdout: `{"since": ISO, "candidates": [...]}`)
+  - CLI `extract --out DIR [--state PATH] <message_id>...`(stdout: `{"<添付キー>": "<保存パス>"}`、未 DL/未検出は stderr + 非0)
+  - 内部: `open_envelope_index(path) -> sqlite3.Connection` / `query_attachment_messages(conn, cutoff_epoch) -> list[dict]`(添付ありメッセージ。PDF 判定は `.emlx` の MIME 側)/ `build_emlx_index(mail_root) -> dict[str,str]` / `read_emlx(path) -> email.message.Message` / `emlx_message_id(msg) -> str` / `pdf_parts(msg) -> list[tuple]` / `plan_extract_targets(state, message_id) -> list[tuple]`
+- また Task 5 の `load_state` に `sources` 既定を追加(下 Step 1 のテスト更新込み)。
 
 - [ ] **Step 1: Write the failing tests**
 
-`test_scan_mail.py` に追加:
+`test_scan_mail.py` 先頭の import に追加:
 
 ```python
-from unittest import mock
+import email
+import sqlite3
+```
+
+既存の `test_roundtrip_and_default`(Task 5)を `sources` 込みに更新:
+
+```python
+    def test_roundtrip_and_default(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "state.json")
+            st = scan_mail.load_state(p)
+            self.assertEqual(st, {"last_scan": None, "pending": {}, "uploaded": {},
+                                  "failed": {}, "discarded": {}, "sources": {}})
+            st["pending"]["k"] = {"subject": "s"}
+            scan_mail.save_state(st, p)
+            self.assertEqual(scan_mail.load_state(p)["pending"]["k"]["subject"], "s")
+            self.assertFalse(os.path.exists(p + ".tmp"))
+```
+
+`test_scan_mail.py` に新規テストクラスを追加:
+
+```python
+def _make_emlx(path, headers, parts):
+    """parts: [(content_type, filename|None, payload_bytes|None, extra_headers_str)]"""
+    lines = []
+    boundary = "BOUNDARY123"
+    lines.append("From: %s" % headers.get("From", "a@b.jp"))
+    lines.append("Subject: %s" % headers.get("Subject", "sub"))
+    if headers.get("Message-ID"):
+        lines.append("Message-ID: %s" % headers["Message-ID"])
+    lines.append('Content-Type: multipart/mixed; boundary="%s"' % boundary)
+    lines.append("")
+    for ct, fn, payload, extra in parts:
+        lines.append("--%s" % boundary)
+        disp = ('; name="%s"' % fn) if fn else ""
+        lines.append("Content-Type: %s%s" % (ct, disp))
+        if fn:
+            lines.append('Content-Disposition: attachment; filename="%s"' % fn)
+        if payload is not None:
+            import base64
+            lines.append("Content-Transfer-Encoding: base64")
+            lines.append("")
+            lines.append(base64.b64encode(payload).decode())
+        else:
+            if extra:
+                lines.append(extra)
+            lines.append("")
+        lines.append("")
+    lines.append("--%s--" % boundary)
+    body = ("\r\n".join(lines)).encode()
+    blob = ("%d\n" % len(body)).encode() + body
+    with open(path, "wb") as f:
+        f.write(blob)
+
+
+class TestEnvelopeIndex(unittest.TestCase):
+    def _db(self, d):
+        p = os.path.join(d, "Envelope Index")
+        c = sqlite3.connect(p)
+        c.executescript("""
+          CREATE TABLE messages(ROWID INTEGER PRIMARY KEY, sender INTEGER, subject INTEGER,
+                                date_received INTEGER, deleted INTEGER DEFAULT 0);
+          CREATE TABLE attachments(ROWID INTEGER PRIMARY KEY, message INTEGER, name TEXT);
+          CREATE TABLE addresses(ROWID INTEGER PRIMARY KEY, address TEXT, comment TEXT DEFAULT '');
+          CREATE TABLE subjects(ROWID INTEGER PRIMARY KEY, subject TEXT);
+        """)
+        c.execute("INSERT INTO addresses VALUES(1,'shop@x.jp','')")
+        c.execute("INSERT INTO subjects VALUES(1,'領収書 ¥1,000')")
+        # in range + pdf
+        c.execute("INSERT INTO messages VALUES(10,1,1,2000,0)")
+        c.execute("INSERT INTO attachments VALUES(1,10,'r.pdf')")
+        # in range, non-pdf only -> excluded
+        c.execute("INSERT INTO messages VALUES(11,1,1,2000,0)")
+        c.execute("INSERT INTO attachments VALUES(2,11,'note.txt')")
+        # out of range -> excluded
+        c.execute("INSERT INTO messages VALUES(12,1,1,500,0)")
+        c.execute("INSERT INTO attachments VALUES(3,12,'old.pdf')")
+        # deleted -> excluded
+        c.execute("INSERT INTO messages VALUES(13,1,1,2000,1)")
+        c.execute("INSERT INTO attachments VALUES(4,13,'del.pdf')")
+        c.commit(); c.close()
+        return p
+
+    def test_query_returns_attachment_messages_in_range(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self._db(d)
+            conn = scan_mail.open_envelope_index(p)
+            rows = scan_mail.query_attachment_messages(conn, 1000)
+            conn.close()
+            # 添付ありで in-range・非 deleted の 10(r.pdf)と 11(note.txt)を返す。
+            # PDF かどうかの判定は後段の pdf_parts(.emlx の MIME)で行うためここでは絞らない。
+            # 12(範囲外)・13(deleted)は除外。
+            self.assertEqual(sorted(r["rowid"] for r in rows), [10, 11])
+            by_id = {r["rowid"]: r for r in rows}
+            self.assertEqual(by_id[10]["sender"], "shop@x.jp")
+            self.assertEqual(by_id[10]["subject"], "領収書 ¥1,000")
+            self.assertNotIn("pdf_names", by_id[10])
+
+    def test_open_missing_db_exits_with_fda_hint(self):
+        with self.assertRaises(SystemExit) as cm:
+            scan_mail.open_envelope_index("/nonexistent/Envelope Index")
+        self.assertIn("フルディスクアクセス", str(cm.exception))
+
+
+class TestEmlx(unittest.TestCase):
+    def test_build_index_prefers_full(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "A/Messages"))
+            os.makedirs(os.path.join(d, "B/Messages"))
+            open(os.path.join(d, "A/Messages/10.partial.emlx"), "w").close()
+            open(os.path.join(d, "B/Messages/10.emlx"), "w").close()
+            open(os.path.join(d, "A/Messages/11.partial.emlx"), "w").close()
+            idx = scan_mail.build_emlx_index(d)
+            self.assertTrue(idx["10"].endswith("10.emlx"))          # full 優先
+            self.assertTrue(idx["11"].endswith("11.partial.emlx"))  # partial のみ
+
+    def test_read_parse_and_pdf_parts(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "10.emlx")
+            _make_emlx(p, {"Message-ID": "<abc@x>", "Subject": "領収書"},
+                       [("text/plain", None, b"body 1,000\xef\xbc\x91", ""),
+                        ("application/pdf", "r.pdf", b"%PDF-1.4 data", "")])
+            msg = scan_mail.read_emlx(p)
+            self.assertEqual(scan_mail.emlx_message_id(msg), "<abc@x>")
+            parts = scan_mail.pdf_parts(msg)
+            self.assertEqual(len(parts), 1)
+            idx, name, payload = parts[0]
+            self.assertEqual((idx, name), (1, "r.pdf"))
+            self.assertTrue(payload.startswith(b"%PDF"))
+
+    def test_pdf_parts_detects_partial(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "10.partial.emlx")
+            _make_emlx(p, {"Message-ID": "<abc@x>"},
+                       [("application/pdf", "big.pdf", None, "X-Apple-Content-Length: 999")])
+            parts = scan_mail.pdf_parts(scan_mail.read_emlx(p))
+            self.assertEqual(parts[0][2], None)   # payload 未 DL
+
+    def test_message_id_fallback(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "10.emlx")
+            _make_emlx(p, {}, [("application/pdf", "r.pdf", b"%PDF", "")])
+            msg = scan_mail.read_emlx(p)
+            self.assertTrue(scan_mail.emlx_message_id(msg).startswith("<") or
+                            scan_mail.emlx_message_id(msg) == "")
 
 
 class TestScanCmd(unittest.TestCase):
-    def test_scan_checkpoints_pending_before_last_scan(self):
-        """pending 書き出し → last_scan 前進の順序(spec の要)を save 呼び出し順で検証。"""
-        msg = {"message_id": "<m@x>", "date": "2026-07-01T10:00:00+09:00",
-               "sender": "a@b.jp", "subject": "領収書", "body_preview": "",
-               "pdf_attachments": [{"index": 1, "name": "r.pdf"}]}
-        saves = []
+    def _setup(self, d):
+        # 一時 Envelope Index + emlx を作り、scan_mail 定数をパッチ
+        mail_root = os.path.join(d, "V10")
+        os.makedirs(os.path.join(mail_root, "acct/Messages"))
+        ei_dir = os.path.join(mail_root, "MailData"); os.makedirs(ei_dir)
+        ei = os.path.join(ei_dir, "Envelope Index")
+        c = sqlite3.connect(ei)
+        c.executescript("""
+          CREATE TABLE messages(ROWID INTEGER PRIMARY KEY, sender INTEGER, subject INTEGER,
+                                date_received INTEGER, deleted INTEGER DEFAULT 0);
+          CREATE TABLE attachments(ROWID INTEGER PRIMARY KEY, message INTEGER, name TEXT);
+          CREATE TABLE addresses(ROWID INTEGER PRIMARY KEY, address TEXT, comment TEXT DEFAULT '');
+          CREATE TABLE subjects(ROWID INTEGER PRIMARY KEY, subject TEXT);""")
+        c.execute("INSERT INTO addresses VALUES(1,'shop@x.jp','')")
+        c.execute("INSERT INTO subjects VALUES(1,'領収書 ¥1,000')")
+        c.execute("INSERT INTO messages VALUES(10,1,1,2000000000,0)")
+        c.execute("INSERT INTO attachments VALUES(1,10,'r.pdf')")
+        c.commit(); c.close()
+        _make_emlx(os.path.join(mail_root, "acct/Messages/10.emlx"),
+                   {"Message-ID": "<abc@x>", "Subject": "領収書 ¥1,000"},
+                   [("text/plain", None, b"body", ""),
+                    ("application/pdf", "r.pdf", b"%PDF-1.4", "")])
+        return mail_root, ei
+
+    def test_scan_checkpoints_and_records_sources(self):
         with tempfile.TemporaryDirectory() as d:
-            p = os.path.join(d, "state.json")
+            mail_root, ei = self._setup(d)
+            statep = os.path.join(d, "state.json")
+            saves = []
             real_save = scan_mail.save_state
 
-            def spy(state, path=p):
-                saves.append(json.loads(json.dumps(state)))
-                real_save(state, path)
+            def spy(state, path=statep):
+                saves.append(json.loads(json.dumps(state))); real_save(state, path)
 
-            with mock.patch.object(scan_mail, "run_jxa_scan", return_value=[msg]), \
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch.object(scan_mail, "ENVELOPE_INDEX", ei), \
                  mock.patch.object(scan_mail, "save_state", side_effect=spy), \
                  mock.patch("sys.stdout"):
-                scan_mail.main(["scan", "--state", p, "--since", "2026-07-01"])
+                scan_mail.main(["scan", "--state", statep, "--since", "2000-01-01"])
             self.assertEqual(len(saves), 2)
-            self.assertIn("<m@x>/1-r.pdf", saves[0]["pending"])
-            self.assertIsNone(saves[0]["last_scan"])   # 1回目は cursor 未前進
-            self.assertIsNotNone(saves[1]["last_scan"])
+            self.assertIn("<abc@x>/1-r.pdf", saves[0]["pending"])
+            self.assertEqual(saves[0]["sources"]["<abc@x>"], 10)
+            self.assertIsNone(saves[0]["last_scan"])       # 1回目は cursor 未前進
+            self.assertIsNotNone(saves[1]["last_scan"])    # 2回目で前進
 
-    def test_scan_default_since_is_90_days_when_no_state(self):
+    def test_scan_default_since_is_year_start(self):
         with tempfile.TemporaryDirectory() as d:
-            p = os.path.join(d, "state.json")
-            with mock.patch.object(scan_mail, "run_jxa_scan", return_value=[]) as rj, \
+            mail_root, ei = self._setup(d)
+            statep = os.path.join(d, "state.json")
+            captured = {}
+            real_q = scan_mail.query_attachment_messages
+
+            def spy_q(conn, cutoff):
+                captured["cutoff"] = cutoff; return real_q(conn, cutoff)
+
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch.object(scan_mail, "ENVELOPE_INDEX", ei), \
+                 mock.patch.object(scan_mail, "query_attachment_messages", side_effect=spy_q), \
                  mock.patch("sys.stdout"):
-                scan_mail.main(["scan", "--state", p])
-            since = rj.call_args[0][0]
-            dt = datetime.datetime.fromisoformat(since)
-            age = datetime.datetime.now().astimezone() - dt
-            self.assertAlmostEqual(age.days, 90, delta=1)
+                scan_mail.main(["scan", "--state", statep])
+            year_start = datetime.datetime(datetime.datetime.now().year, 1, 1)
+            self.assertEqual(captured["cutoff"], int(year_start.timestamp()))
 
 
-class TestJxaParse(unittest.TestCase):
-    def test_parse_jxa_output(self):
-        raw = json.dumps([{"message_id": "<m@x>", "date": "2026-07-01T01:00:00.000Z",
-                           "sender": "s", "subject": "t", "body_preview": "b",
-                           "pdf_attachments": [{"index": 2, "name": "a.pdf"}]}])
-        msgs = scan_mail.parse_jxa_output(raw)
-        self.assertEqual(msgs[0]["pdf_attachments"][0]["index"], 2)
+class TestExtractCmd(unittest.TestCase):
+    def _state(self, statep, rowid=10, mid="<abc@x>"):
+        st = scan_mail.load_state(statep)
+        key = "%s/1-r.pdf" % mid
+        st["pending"][key] = {"subject": "領収書", "sender": "shop@x.jp",
+                              "date": "2026-07-01T10:00:00+09:00", "amounts": [1000]}
+        st["sources"][mid] = rowid
+        scan_mail.save_state(st, statep)
 
-    def test_parse_jxa_output_rejects_garbage(self):
-        with self.assertRaises(SystemExit):
-            scan_mail.parse_jxa_output("execution error: Mail got an error (-1712)")
+    def test_extract_full_saves_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            mail_root = os.path.join(d, "V10"); os.makedirs(os.path.join(mail_root, "acct/Messages"))
+            _make_emlx(os.path.join(mail_root, "acct/Messages/10.emlx"),
+                       {"Message-ID": "<abc@x>"}, [("application/pdf", "r.pdf", b"%PDF-1.4 X", "")])
+            statep = os.path.join(d, "state.json"); self._state(statep)
+            outd = os.path.join(d, "out")
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), mock.patch("sys.stdout"):
+                rc = scan_mail.main(["extract", "--out", outd, "--state", statep, "<abc@x>"])
+            self.assertEqual(rc, 0)
+            saved = [f for f in os.listdir(outd) if f.endswith(".pdf")]
+            self.assertEqual(len(saved), 1)
+            self.assertTrue(saved[0].startswith("20260701_x.jp_r_"))
+            self.assertTrue(open(os.path.join(outd, saved[0]), "rb").read().startswith(b"%PDF"))
 
+    def test_extract_partial_skips_with_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            mail_root = os.path.join(d, "V10"); os.makedirs(os.path.join(mail_root, "acct/Messages"))
+            _make_emlx(os.path.join(mail_root, "acct/Messages/10.partial.emlx"),
+                       {"Message-ID": "<abc@x>"},
+                       [("application/pdf", "r.pdf", None, "X-Apple-Content-Length: 999")])
+            statep = os.path.join(d, "state.json"); self._state(statep)
+            outd = os.path.join(d, "out")
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                rc = scan_mail.main(["extract", "--out", outd, "--state", statep, "<abc@x>"])
+            self.assertEqual(rc, 1)
+            self.assertFalse(os.path.isdir(outd) and any(f.endswith(".pdf") for f in os.listdir(outd)))
 
-class TestExtractNamePlan(unittest.TestCase):
-    def test_plan_extract_targets_reads_pending(self):
-        state = {"last_scan": None,
-                 "pending": {"<m@x>/1-r.pdf": {"subject": "s", "sender": "a@shop.jp",
-                                               "date": "2026-07-01T10:00:00+09:00",
-                                               "amounts": [100]},
-                             "<other>/1-z.pdf": {"subject": "", "sender": "",
-                                                 "date": "", "amounts": []}},
-                 "uploaded": {}, "failed": {}}
-        targets = scan_mail.plan_extract_targets(state, "<m@x>")
-        self.assertEqual(len(targets), 1)
-        idx, name, fname = targets[0]
-        self.assertEqual((idx, name), (1, "r.pdf"))
-        self.assertTrue(fname.startswith("20260701_shop.jp_r_"))
-
-    def test_plan_extract_targets_includes_retryable_failed(self):
-        state = {"last_scan": None, "pending": {}, "uploaded": {}, "discarded": {},
-                 "failed": {"<m@x>/1-r.pdf": {"error": "HTTP 500",
-                                              "sender": "a@shop.jp",
-                                              "date": "2026-07-01T10:00:00+09:00"},
-                            "<m@x>/2-big.pdf": {"error": "HTTP 413",
-                                                "permanent": True}}}
-        targets = scan_mail.plan_extract_targets(state, "<m@x>")
-        self.assertEqual([(t[0], t[1]) for t in targets], [(1, "r.pdf")])
+    def test_extract_missing_source_exits_nonzero(self):
+        with tempfile.TemporaryDirectory() as d:
+            mail_root = os.path.join(d, "V10"); os.makedirs(mail_root)
+            statep = os.path.join(d, "state.json")
+            st = scan_mail.load_state(statep)
+            st["pending"]["<zzz@x>/1-r.pdf"] = {"subject": "", "sender": "", "date": "", "amounts": []}
+            scan_mail.save_state(st, statep)   # sources に <zzz@x> なし
+            with mock.patch.object(scan_mail, "MAIL_ROOT", mail_root), \
+                 mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                rc = scan_mail.main(["extract", "--out", os.path.join(d, "out"),
+                                     "--state", statep, "<zzz@x>"])
+            self.assertEqual(rc, 1)
 ```
 
-`test_scan_mail.py` 先頭の import に `import datetime` を追加。
+`test_scan_mail.py` 先頭 import に `import datetime` が無ければ追加。
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd ~/dotfiles/.claude/skills/mail2mf && python3 -m unittest discover -s tests -v`
-Expected: ERROR — `AttributeError: module 'scan_mail' has no attribute 'run_jxa_scan'`(ほか同種)
+Expected: ERROR — `AttributeError: module 'scan_mail' has no attribute 'open_envelope_index'`(ほか同種)、および更新した `test_roundtrip_and_default` が `sources` 欠如で FAIL。
 
 - [ ] **Step 3: Write implementation**
 
-`scan_mail.py` に追加。`main()` にサブコマンド登録:
+`scan_mail.py` の import に追加: `import email`, `import sqlite3`。定数を追加:
 
 ```python
-# JXA: whose で日付フィルタし、プロパティは配列一括取得(1メッセージ毎の
-# Apple Event 往復を避ける)。本文は PDF 付きメールのみ個別取得。
-# ponytail: 大量ヒット時は content() 取得が支配的。遅すぎる場合の改善路は
-# Envelope Index (SQLite) 直読みだが、フルディスクアクセスが要るため v1 では見送り。
-JXA_SCAN = r"""
-function run(argv) {
-  const since = new Date(argv[0]);
-  const Mail = Application("Mail");
-  const msgs = Mail.inbox.messages.whose({dateReceived: {_greaterThan: since}});
-  const ids = msgs.messageId();
-  const dates = msgs.dateReceived();
-  const senders = msgs.sender();
-  const subjects = msgs.subject();
-  const out = [];
-  for (let i = 0; i < ids.length; i++) {
-    let names = [], mimes = [];
-    try {
-      names = msgs[i].mailAttachments.name();
-      mimes = msgs[i].mailAttachments.mimeType();
-    } catch (e) { continue; }
-    const pdfs = [];
-    for (let j = 0; j < names.length; j++) {
-      const n = names[j] || "";
-      const mt = (mimes[j] || "").toLowerCase();
-      if (n.toLowerCase().endsWith(".pdf") || mt === "application/pdf") {
-        pdfs.push({index: j + 1, name: n});
-      }
-    }
-    if (!pdfs.length) continue;
-    let body = "";
-    try { body = (msgs[i].content() || "").slice(0, 1000); } catch (e) {}
-    out.push({message_id: ids[i], date: dates[i].toISOString(),
-              sender: senders[i], subject: subjects[i],
-              body_preview: body, pdf_attachments: pdfs});
-  }
-  return JSON.stringify(out);
-}
-"""
+MAIL_ROOT = os.path.expanduser("~/Library/Mail/V10")
+ENVELOPE_INDEX = os.path.join(MAIL_ROOT, "MailData", "Envelope Index")
+```
 
-APPLESCRIPT_EXTRACT = '''
-set AppleScript's text item delimiters to linefeed
-tell application "Mail"
-  set theMsgs to (messages of inbox whose message id is "%s")
-  if (count of theMsgs) = 0 then error "message not found"
-  set m to item 1 of theMsgs
-  set i to 0
-  repeat with a in mail attachments of m
-    set i to i + 1
-    save a in POSIX file ("%s/att-" & i)
-  end repeat
-  return i as string
-end tell
-'''
+`load_state` の既定に `sources` を追加(既存キー群に1行足すだけ):
 
+```python
+    for k in ("pending", "uploaded", "failed", "discarded", "sources"):
+        state.setdefault(k, {})
+```
 
-def parse_jxa_output(text):
-    try:
-        msgs = json.loads(text)
-    except ValueError:
-        raise SystemExit("JXA scan failed: %s" % text[:300])
-    if not isinstance(msgs, list):
-        raise SystemExit("JXA scan returned unexpected JSON")
-    return msgs
+新規関数と CLI を追加(既存の `mark`/`discard` サブコマンドはそのまま):
 
-
-def run_jxa_scan(since_iso):
-    cp = subprocess.run(
-        ["osascript", "-l", "JavaScript", "-e", JXA_SCAN, since_iso],
-        capture_output=True, text=True, timeout=1800)
-    if cp.returncode != 0:
+```python
+def open_envelope_index(path=ENVELOPE_INDEX):
+    if not os.path.exists(path):
         raise SystemExit(
-            "osascript failed (Mail のオートメーション権限を確認: システム設定 > "
-            "プライバシーとセキュリティ > オートメーション): %s" % cp.stderr.strip()[:300])
-    return parse_jxa_output(cp.stdout.strip())
+            "Envelope Index が見つからない/読めません。システム設定 > プライバシーと"
+            "セキュリティ > フルディスクアクセス で端末アプリに許可してください: %s" % path)
+    try:
+        return sqlite3.connect("file:%s?mode=ro" % path, uri=True)
+    except sqlite3.Error as e:
+        raise SystemExit(
+            "Envelope Index を開けません(フルディスクアクセスを確認してください): %s" % e)
+
+
+def query_attachment_messages(conn, cutoff_epoch):
+    # 添付を持つメッセージを引く(PDF 判定は名前ではなく .emlx の MIME で行うため、
+    # 拡張子 .pdf でなく application/pdf でも取りこぼさない)。DISTINCT で1メッセージ1行。
+    cur = conn.execute(
+        "SELECT DISTINCT m.ROWID, m.date_received, ad.address, s.subject "
+        "FROM messages m JOIN attachments a ON a.message=m.ROWID "
+        "LEFT JOIN addresses ad ON ad.ROWID=m.sender "
+        "LEFT JOIN subjects s ON s.ROWID=m.subject "
+        "WHERE m.date_received>=? AND m.deleted=0 "
+        "ORDER BY m.date_received DESC, m.ROWID", (cutoff_epoch,))
+    return [{"rowid": rowid, "date_received": dr, "sender": addr or "", "subject": subj or ""}
+            for rowid, dr, addr, subj in cur.fetchall()]
+
+
+def build_emlx_index(mail_root=MAIL_ROOT):
+    idx = {}
+    for dp, _, fns in os.walk(mail_root):
+        for fn in fns:
+            if fn.endswith(".emlx"):
+                rowid = fn.split(".")[0]
+                full = fn.endswith(".emlx") and not fn.endswith(".partial.emlx")
+                cur = idx.get(rowid)
+                # full を優先。未登録 or 既存が partial かつ今回 full なら差し替え
+                if cur is None or (full and cur.endswith(".partial.emlx")):
+                    idx[rowid] = os.path.join(dp, fn)
+    return idx
+
+
+def read_emlx(path):
+    with open(path, "rb") as f:
+        raw = f.read()
+    nl = raw.index(b"\n")
+    count = int(raw[:nl].strip())
+    body = raw[nl + 1:nl + 1 + count]
+    return email.message_from_bytes(body)
+
+
+def emlx_message_id(msg):
+    mid = msg.get("Message-ID")
+    return mid.strip() if mid else ""
+
+
+def pdf_parts(msg):
+    out = []
+    i = 0
+    for part in msg.walk():
+        fn = part.get_filename()
+        if not fn:
+            continue
+        i += 1
+        if fn.lower().endswith(".pdf") or part.get_content_type() == "application/pdf":
+            try:
+                payload = part.get_payload(decode=True)
+            except Exception:
+                payload = None
+            # 未 DL(partial)は None または空 b'' になり得る。実PDFは0バイトにならないので
+            # 空はすべて「未ダウンロード」に正規化する(空PDFを誤って抽出しない)。
+            if not payload:
+                payload = None
+            out.append((i, fn, payload))
+    return out
+
+
+def _body_preview(msg):
+    for part in msg.walk():
+        if part.get_content_type() == "text/plain" and not part.get_filename():
+            try:
+                txt = part.get_payload(decode=True)
+                return (txt.decode(part.get_content_charset() or "utf-8", "replace")
+                        if txt else "")[:1000]
+            except Exception:
+                return ""
+    return ""
 
 
 def cmd_scan(args):
+    # 注: この Mail V10 の Envelope Index では messages.date_received は Unix epoch。
+    # 実測で確認済み(raw 1784382632 → 2026-07-18、`datetime(...,'unixepoch')` が正しい年月日を返す)。
+    # 旧 macOS の Cocoa epoch(2001基準)ではないため、Unix epoch の cutoff をそのまま比較する。
     state = load_state(args.state)
     if args.since:
         since = args.since
+        cutoff = int(datetime.datetime.fromisoformat(args.since).timestamp())
     elif state.get("last_scan"):
         since = state["last_scan"]
+        cutoff = int(datetime.datetime.fromisoformat(since).timestamp())
     else:
-        since = (datetime.datetime.now().astimezone()
-                 - datetime.timedelta(days=90)).isoformat(timespec="seconds")
+        ys = datetime.datetime(datetime.datetime.now().year, 1, 1)
+        since = ys.isoformat(timespec="seconds")
+        cutoff = int(ys.timestamp())
     scan_started = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
-    messages = run_jxa_scan(since)
+
+    conn = open_envelope_index(ENVELOPE_INDEX)
+    try:
+        rows = query_attachment_messages(conn, cutoff)
+    finally:
+        conn.close()
+    emlx = build_emlx_index(MAIL_ROOT)
+
+    # 添付順位(index)は .emlx の MIME パート位置が唯一の正。DB の attachments.name は
+    # 順序保証がないため、index の生成には使わない(誤ったキーを作らない)。.emlx が
+    # 読めない候補は skip し、その受信日時で cursor を巻き戻して次回再スキャンする。
+    # partial.emlx も MIME 構造は読めるので、この skip は「ファイル自体が未在/破損」の稀な場合のみ。
+    messages, seen = [], set()
+    unresolved_min = None
+    for r in rows:
+        path = emlx.get(str(r["rowid"]))
+        msg = None
+        if path and os.path.exists(path):
+            try:
+                msg = read_emlx(path)
+            except Exception:
+                msg = None
+        if msg is None:
+            print("skip rowid %d: .emlx 未在/解析不可(次回再スキャン)" % r["rowid"],
+                  file=sys.stderr)
+            unresolved_min = (r["date_received"] if unresolved_min is None
+                              else min(unresolved_min, r["date_received"]))
+            continue
+        parts = pdf_parts(msg)
+        if not parts:
+            continue
+        mid = emlx_message_id(msg) or ("rowid:%d" % r["rowid"])
+        if mid in seen:
+            continue
+        seen.add(mid)
+        state["sources"][mid] = r["rowid"]
+        messages.append({
+            "message_id": mid,
+            "date": datetime.datetime.fromtimestamp(r["date_received"]).astimezone()
+                    .isoformat(timespec="seconds"),
+            "sender": r["sender"], "subject": r["subject"],
+            "body_preview": _body_preview(msg),
+            "pdf_attachments": [{"index": i, "name": n} for i, n, _ in parts]})
+
     pending, candidates = build_candidates(state, messages)
     state["pending"] = pending
-    save_state(state, args.state)          # 候補を先に永続化(取りこぼし防止)
-    state["last_scan"] = scan_started
-    save_state(state, args.state)          # その後で cursor を前進
+    save_state(state, args.state)      # 候補 + sources を先に永続化(取りこぼし防止)
+    # cursor は **クエリ前に捕捉した scan_started** へ(クエリ後〜今の間に届いたメールを
+    # 取りこぼさないため now() は使わない)。未解決(skip)候補があればその最古受信時刻まで
+    # さらに巻き戻す。
+    cursor = datetime.datetime.fromisoformat(scan_started)
+    if unresolved_min is not None:
+        cursor = min(cursor, datetime.datetime.fromtimestamp(unresolved_min).astimezone())
+    state["last_scan"] = cursor.isoformat(timespec="seconds")
+    save_state(state, args.state)      # 読み取り成功後に cursor 前進
     print(json.dumps({"since": since, "candidates": candidates},
                      ensure_ascii=False, indent=1))
     return 0
@@ -1289,44 +1568,37 @@ def plan_extract_targets(state, message_id):
 def cmd_extract(args):
     state = load_state(args.state)
     os.makedirs(args.out, exist_ok=True)
-    results = {}
-    ok = True
+    emlx = build_emlx_index(MAIL_ROOT)
+    results, ok = {}, True
     for mid in args.message_ids:
         targets = plan_extract_targets(state, mid)
         if not targets:
-            print("no pending attachments for %s" % mid, file=sys.stderr)
-            ok = False
-            continue
-        script = APPLESCRIPT_EXTRACT % (mid.replace('"', '\\"'), args.out)
-        cp = subprocess.run(["osascript", "-e", script],
-                            capture_output=True, text=True, timeout=600)
-        if cp.returncode != 0:
-            print("extract failed for %s: %s" % (mid, cp.stderr.strip()[:200]),
-                  file=sys.stderr)
-            ok = False
-            continue
-        saved = {i: os.path.join(args.out, "att-%d" % i)
-                 for i in range(1, int(cp.stdout.strip() or "0") + 1)}
-        wanted = set()
+            print("no pending attachments for %s" % mid, file=sys.stderr); ok = False; continue
+        rowid = state.get("sources", {}).get(mid)
+        path = emlx.get(str(rowid)) if rowid is not None else None
+        if not path or not os.path.exists(path):
+            print("emlx not found for %s (再スキャンしてください)" % mid, file=sys.stderr)
+            ok = False; continue
+        try:
+            parts = {(i, n): p for i, n, p in pdf_parts(read_emlx(path))}
+        except Exception as e:
+            print("emlx parse failed for %s: %s" % (mid, e), file=sys.stderr); ok = False; continue
         for idx, name, fname in targets:
-            src = saved.get(idx)
             key = attachment_key(mid, idx, name)
-            if src and os.path.exists(src):
-                dst = os.path.join(args.out, fname)
-                os.replace(src, dst)
-                results[key] = dst
-                wanted.add(idx)
-            else:
-                print("attachment %d missing for %s" % (idx, mid), file=sys.stderr)
-                ok = False
-        for idx, path in saved.items():   # 非 PDF 添付の残骸を削除
-            if idx not in wanted and os.path.exists(path):
-                os.remove(path)
+            payload = parts.get((idx, name))
+            if payload is None:
+                print("attachment %d of %s は未ダウンロード。Mail で対象メールを開いて"
+                      "添付を DL してから再実行してください。" % (idx, mid), file=sys.stderr)
+                ok = False; continue
+            dst = os.path.join(args.out, fname)
+            with open(dst, "wb") as f:
+                f.write(payload)
+            results[key] = dst
     print(json.dumps(results, ensure_ascii=False))
     return 0 if ok else 1
 ```
 
-`main()` に追加:
+`main()` に追加(既存の `mark`/`discard` 登録の前でよい):
 
 ```python
     p = sub.add_parser("scan")
@@ -1343,12 +1615,12 @@ def cmd_extract(args):
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd ~/dotfiles/.claude/skills/mail2mf && python3 -m unittest discover -s tests -v`
-Expected: `OK` (37 tests)
+Expected: `OK`(全テスト green。scan_mail 側は Task 5 分 + 本タスク分)
 
-- [ ] **Step 5: Manual smoke test (read-only)**
+- [ ] **Step 5: Manual smoke test(実 Envelope Index、read-only)**
 
-Run: `cd ~/dotfiles/.claude/skills/mail2mf && python3 scripts/scan_mail.py scan --since 2026-07-15 --state /tmp/mail2mf-smoke.json | head -40`
-Expected: 直近3日の PDF 付きメールが `candidates` に JSON で出る(0件でも `{"since": ..., "candidates": []}` が正常)。実行後 `rm /tmp/mail2mf-smoke.json`。
+Run: `cd ~/dotfiles/.claude/skills/mail2mf && python3 scripts/scan_mail.py scan --since 2026-07-01 --state /tmp/mail2mf-smoke.json | head -40`
+Expected: 今年分の PDF 決済メール候補が JSON で出る(0件でも `{"since":..., "candidates":[]}` が正常)。数秒で返る(Apple Events を使わないためタイムアウトしない)。実行後 `rm /tmp/mail2mf-smoke.json`。
 
 - [ ] **Step 6: Task Review(✅必須)→ Commit**
 
@@ -1357,7 +1629,7 @@ task-reviewer の ✅ Approved を得てからコミットする(Global Constrai
 ```bash
 cd ~/dotfiles
 git add .claude/skills/mail2mf
-git commit -m "feat(mail2mf): Mail.app scan (JXA) and attachment extract
+git commit -m "feat(mail2mf): Envelope Index scan + .emlx extract
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
@@ -1396,7 +1668,10 @@ description: Mail.app の決済系メール(PDF 証憑付き)をマネーフォ�
 python3 "$SKILL_DIR/scripts/scan_mail.py" scan
 ```
 
-- ユーザーが期間を指定した場合のみ `--since YYYY-MM-DD` を付ける。
+- 既定範囲は今年の1月1日から(state があれば前回スキャン以降)。ユーザーが期間を
+  指定した場合のみ `--since YYYY-MM-DD` を付ける。
+- Mail の Envelope Index(SQLite)を直読みする(要フルディスクアクセス)。Apple Events を
+  使わないため大きな受信トレイでもタイムアウトしない。
 - 出力 JSON の `candidates` が空なら「新しい候補なし」と報告して手順 4 へ。
 
 ### 2. 判定と承認(必須ゲート)
