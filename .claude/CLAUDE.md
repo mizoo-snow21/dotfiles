@@ -17,6 +17,8 @@
 - If something goes sideways, STOP and re-plan immediately - don't keep pushing
 - Use plan mode for verification steps, not just building
 - Write detailed specs upfront to reduce ambiguity
+- Investigation is read-only: commands that mutate the working tree (pull/generate/codegen scripts, edits) count as implementation — defer them until GO
+- Minor fixes (few files, no schema / API-contract / shared-env blast radius) are a **sanctioned exception to the SDD Mandatory flow** (user directive, 2026-07-06): skip the plan doc + codex plan-review and go straight to foreground TDD after announcing "implementing directly" — but still run tests + a lightweight review before commit. Larger or destructive changes take the full SDD flow (plan → codex → zero findings → Cursor → two-stage review)
 
 ### 2. Subagent Strategy
 - Use subagents liberally to keep main context window clean
@@ -27,6 +29,7 @@
 ### 3. Plan / Todo Review Loop
 - Before showing any implementation plan, spec, or todo document to the user, review it with codex
 - Apply this to plan-style and todo-style docs in general, not just a single filename
+- Extend this to externally-published documents (issue / PR bodies): draft → codex review → zero findings → create, so it's right the first time. If a created item still needs changes, edit it in place (preserves audit context); avoid the create → close → reopen churn
 - Use GPT-5.6 Sol (`-m gpt-5.6-sol`) for these reviews
 - Explicitly tell codex to ignore nitpicks and only call out critical issues
 - Update the document and re-run the review until codex has no findings left
@@ -47,6 +50,7 @@ codex exec resume --last -m gpt-5.6-sol "The document was updated. Review it aga
 - Diff behavior between main and your changes when relevant
 - Ask yourself: "Would a staff engineer approve this?"
 - Run tests, check logs, demonstrate correctness
+- Completion reports for artifact-producing steps (commit / PR / deploy / delete) must confirm the real artifact in the same turn (`git log -1`, `gh pr view <n>`, `ls`, exec log) and cite the real ID (commit hash / PR URL). No ID → no completion claim. After long loops or context compaction, don't trust your own prior self-report — re-check the real thing
 
 ### 5. Demand Elegance (Balanced)
 - For non-trivial changes: pause and ask "is there a more elegant way?"
@@ -156,4 +160,16 @@ At the start of a session, if the working project's CLAUDE.md contains a `<!-- P
 
 ## Execution / Visibility
 
-- **No background execution**: Do not use Bash with `run_in_background` or async Agent/Workflow — they hide work status. Run long-running processes in the foreground and show progress incrementally.
+- **No *silent* background work** (not no background): you may launch subagents and Cursor in the background and in parallel, but at launch announce what you dispatched and how many, then report each result's key points as its task-notification arrives. Never fire-and-forget, and never block silently for minutes with no output.
+- **Cursor delegation is the default implementation path** (see SDD). Independent tasks may run as multiple Cursor sessions in parallel (1 task = 1 fresh session; keep dependent tasks ordered). If the harness auto-backgrounds a long run, that's fine as long as you wait for completion and report the result.
+- **Destructive operations (force-push / delete / overwrite) and changes needing user judgment run in the foreground** and are shown before executing.
+
+## Git Safety
+
+- git commands that branch on success/failure (rebase / merge / cherry-pick) must not be judged through a pipe — a trailing `tail`/`head` returns exit 0 and hides the real failure. Use `cmd; rc=$?` and check `$rc` directly.
+- Before any force-push or merge, guard explicitly: `git diff --check` (conflict markers), `git status --porcelain | grep -E '^(UU|AA|DD)'` (unresolved paths), and for an in-progress rebase test that the resolved dir actually exists — `test -d "$(git rev-parse --git-path rebase-merge)" -o -d "$(git rev-parse --git-path rebase-apply)"` (works in linked worktrees where `.git` is a file; `--git-path` only prints a path, so you must `test -d` it, not just run it). Never force-push with an unresolved conflict or an in-progress rebase.
+
+## Secret Handling
+
+- Never guess secret names or scan/enumerate multiple secrets (reads as credential-scanning and gets denied). Derive the canonical secret ID and field name from the project's own config first — `rg -n "SECRET_NAME|secretName" scripts/ infrastructure/` or the CDK/Terraform constructs — then fetch that single entry.
+- Never print a secret value; validate format by regex only. Write it to the target (`.env.local` etc.) without echoing.
