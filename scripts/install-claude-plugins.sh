@@ -1,43 +1,46 @@
 #!/bin/bash
 
 # Claude Code プラグイン一括インストールスクリプト
-# マーケットプレース追加 → プラグインインストールを実行します
+# settings.json の extraKnownMarketplaces / enabledPlugins を唯一の情報源として
+# マーケットプレース追加 → プラグインインストールを実行します。
+# ponytail: プラグインを増やすときはこのスクリプトではなく settings.json を編集する
 
-set -e
+set -euo pipefail
+
+SETTINGS="${HOME}/.claude/settings.json"
 
 echo "🔌 Installing Claude Code plugins..."
 
-# claude CLIが利用可能か確認
 if ! command -v claude &> /dev/null; then
     echo "⚠️  claude CLI not found. Skipping plugin installation."
     echo "   Install Claude Code first, then re-run: ./scripts/install-claude-plugins.sh"
     exit 0
 fi
 
+if [[ ! -f "$SETTINGS" ]]; then
+    echo "⚠️  $SETTINGS not found. Skipping."
+    exit 0
+fi
+
 # ==============================================================================
-# Marketplaces
+# Marketplaces (claude-plugins-official は組み込みなので登録不要)
 # ==============================================================================
 
 echo ""
 echo "📦 Setting up marketplaces..."
 
-# Anthropic公式マーケットプレース
-if claude plugin marketplace list 2>/dev/null | grep -q "claude-code-plugins"; then
-    echo "✅ claude-code-plugins marketplace already configured"
-else
-    echo "📥 Adding Anthropic official marketplace..."
-    claude plugin marketplace add https://github.com/anthropics/claude-code
-    echo "✅ Added claude-code-plugins marketplace"
-fi
+known_marketplaces="$(claude plugin marketplace list 2>/dev/null || true)"
 
-# ponytail マーケットプレース
-if claude plugin marketplace list 2>/dev/null | grep -q "ponytail"; then
-    echo "✅ ponytail marketplace already configured"
-else
-    echo "📥 Adding ponytail marketplace..."
-    claude plugin marketplace add DietrichGebert/ponytail
-    echo "✅ Added ponytail marketplace"
-fi
+while IFS=$'\t' read -r name src; do
+    [[ -n "$name" ]] || continue
+    if grep -qF "$name" <<< "$known_marketplaces"; then
+        echo "✅ $name marketplace already configured"
+    else
+        echo "📥 Adding $name marketplace..."
+        claude plugin marketplace add "$src"
+    fi
+done < <(jq -r '.extraKnownMarketplaces // {} | to_entries[]
+                | "\(.key)\t\(.value.source.repo // .value.source.url)"' "$SETTINGS")
 
 # ==============================================================================
 # Plugins
@@ -46,30 +49,17 @@ fi
 echo ""
 echo "🔧 Installing plugins..."
 
-# code-review プラグイン
-if claude plugin list 2>/dev/null | grep -q "code-review@claude-code-plugins"; then
-    echo "✅ code-review already installed"
-else
-    echo "📥 Installing code-review..."
-    claude plugin install code-review
-    echo "✅ Installed code-review"
-fi
+known_plugins="$(claude plugin list 2>/dev/null || true)"
 
-# ponytail プラグイン
-if claude plugin list 2>/dev/null | grep -q "ponytail@ponytail"; then
-    echo "✅ ponytail already installed"
-else
-    echo "📥 Installing ponytail..."
-    claude plugin install ponytail
-    echo "✅ Installed ponytail"
-fi
-
-# 今後プラグインを追加する場合はここに追記:
-# if claude plugin list 2>/dev/null | grep -q "plugin-name@marketplace"; then
-#     echo "✅ plugin-name already installed"
-# else
-#     claude plugin install plugin-name
-# fi
+while read -r plugin; do
+    [[ -n "$plugin" ]] || continue
+    if grep -qF "$plugin" <<< "$known_plugins"; then
+        echo "✅ $plugin already installed"
+    else
+        echo "📥 Installing $plugin..."
+        claude plugin install "$plugin"
+    fi
+done < <(jq -r '.enabledPlugins // {} | keys[]' "$SETTINGS")
 
 echo ""
 echo "🎉 Claude Code plugins installation completed!"

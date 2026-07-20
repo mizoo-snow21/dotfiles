@@ -114,7 +114,8 @@
     "ponytail@ponytail": true,
     "claude-mem@thedotmack": true,
     "ralph-loop@claude-plugins-official": true,
-    "superpowers@superpowers-marketplace": true
+    "superpowers@superpowers-marketplace": true,
+    "slack@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
@@ -133,6 +134,12 @@
       "source": {
         "source": "github",
         "repo": "obra/superpowers-marketplace"
+      }
+    },
+    "thedotmack": {
+      "source": {
+        "source": "github",
+        "repo": "thedotmack/claude-mem"
       }
     }
   },
