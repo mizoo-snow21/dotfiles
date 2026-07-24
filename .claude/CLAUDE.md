@@ -39,9 +39,11 @@
 # Initial review
 codex exec -m gpt-5.6-sol "Review this document. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
 
-# Follow-up review after updates
-codex exec resume --last -m gpt-5.6-sol "The document was updated. Review it again. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
+# Follow-up review after updates — resume the review's own session by id
+codex exec resume {review_session_id} -m gpt-5.6-sol "The document was updated. Review it again. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
 ```
+
+- **Record the session id from the initial review and resume that id.** Do not use `--last`: implementation sessions (under the quota fallback) and other tasks' reviews also create codex sessions, so the most recent one is frequently not the review you mean to continue.
 
 - **`< /dev/null` is mandatory**: without closing stdin, a backgrounded codex hangs forever waiting on the stdin pipe (measured 2026-07-09: backgrounding hung 100% of the time, while the same command re-run in the foreground finished in 1–3 minutes every time). Append it to **every** command that invokes `codex exec`
 
@@ -116,11 +118,12 @@ codex exec resume --last -m gpt-5.6-sol "The document was updated. Review it aga
 - Only merge to main after all reviews pass and `finishing-a-development-branch` is complete
 
 ### Cursor Implementation Rules (Non-Negotiable)
-- **Model: default `cursor-grok-4.5-medium-fast`** (Cursor Grok 4.5 Medium Fast. Identical to the old alias `grok-4.5-fast-high` — despite "high" in that name its effort is medium, so do not use it) — invoke with `cursor agent --model cursor-grok-4.5-medium-fast`. Pass `--model` explicitly in scripts and prompts for reproducibility. Never pass Codex models (e.g. `gpt-5.3-codex-high`) — Codex is reviewer-side only (see Agent Roles)
+- **Model: default `cursor-grok-4.5-medium-fast`** (Cursor Grok 4.5 Medium Fast. Identical to the old alias `grok-4.5-fast-high` — despite "high" in that name its effort is medium, so do not use it) — invoke with `cursor agent --model cursor-grok-4.5-medium-fast`. Pass `--model` explicitly in scripts and prompts for reproducibility. Never pass Codex models (e.g. `gpt-5.3-codex-high`) to Cursor — Codex is reviewer-side only (see Agent Roles), apart from the quota fallback below, where codex runs as its own CLI rather than as a Cursor model
 - **Effort escalation (per task)**: keep `cursor-grok-4.5-medium-fast` as the default. Escalate to `--model cursor-grok-4.5-high-fast` only for tasks involving complex refactoring or tricky multi-step debugging. Per-token price is the same (fast tier); high effort just consumes more reasoning tokens, so escalate only when it is likely to save review round-trips
 - **Split by round: Grok writes it, Composer fixes it** (user directive, 2026-07-25). The **first** implementation of a task goes to Grok (`cursor-grok-4.5-medium-fast`, or the high variant per the escalation rule above). Every **review-fix round after that** goes to Composer 2.5 — `cursor agent --continue --model composer-2.5`. Verify the exact id with `cursor agent models` before scripting it; ids change between Cursor releases and a wrong `--model` silently falls back
-- **All implementation MUST go through Cursor** — Claude Code subagents must NOT write implementation code. Claude Code is for planning, review, and research only
-- **TDD stays inside Cursor** — never split tests and implementation into separate tasks. Before each Cursor dispatch, load `superpowers:test-driven-development` via the Skill tool and **embed its content** into the Cursor prompt (not just the 5-line summary below). The 5-line block is a minimum fallback, not a substitute:
+- **All implementation MUST go through Cursor, except while Cursor's quota is exhausted** — Claude Code subagents must NOT write implementation code. Claude Code is for planning, review, and research only. The one sanctioned exception is the quota fallback below
+- **Quota fallback: when Cursor's quota is exhausted, delegate implementation to the codex CLI** (user directive, 2026-07-24 and again 2026-07-25). Grok and Composer draw on the same Cursor plan quota, so one hitting its limit usually means both are gone (`--model auto` may still answer, but once the user has moved implementation to codex it is no longer the sanctioned path). Dispatch with `codex exec -m gpt-5.6-sol` under workspace-write, resuming via `-c sandbox_mode`, and keep `< /dev/null` on every invocation. Everything else about the flow is unchanged: the TDD body still gets embedded in the prompt, one task still equals one fresh session, review fixes still go back to the same implementer session, and impact / detect_changes gates still apply. Return to the Grok-writes / Composer-fixes split as soon as the quota resets (monthly cycle)
+- **TDD stays inside the implementer session** (Cursor, or the codex CLI under the quota fallback) — never split tests and implementation into separate tasks. Before each dispatch, load `superpowers:test-driven-development` via the Skill tool and **embed its content** into the prompt (not just the 5-line summary below). The 5-line block is a minimum fallback, not a substitute:
   ```
   ## Implementation instructions
   Implement using TDD:
@@ -131,7 +134,7 @@ codex exec resume --last -m gpt-5.6-sol "The document was updated. Review it aga
   5. Report list of changed files
   ```
 - **Fresh Cursor session per task** — never implement multiple tasks in a single Cursor invocation
-- **Route review fixes back to Cursor** — when two-stage review finds issues, don't fix them in Claude Code. Send fixes to Cursor via `--continue --model composer-2.5` (see the Grok-writes / Composer-fixes split above) and re-review
+- **Route review fixes back to the implementer, never into Claude Code** — when two-stage review finds issues, send them to Cursor via `--continue --model composer-2.5` (see the Grok-writes / Composer-fixes split above) and re-review. Under the quota fallback, send them to the same codex session instead — record that session's id when you dispatch the implementer and resume it explicitly (`codex exec resume <SESSION_ID>`). Never use `--last` for this: plan reviews and other tasks also run codex sessions, so `--last` can resume a reviewer or a neighboring task and silently apply the fixes to the wrong work. The rule that binds is "the implementer fixes its own work," not the specific CLI
 - **Pass Cursor prompts inline (do NOT write to .md files)** — dispatch via heredoc directly. The pattern of `Write` to `/tmp/cursor-*.md` then `cat | cursor-agent` is forbidden (slows down execution). Codex auto-review is reserved for spec / plan documents only, not Cursor prompts. Inline prompts must still embed all mandatory CLAUDE.md requirements (reference files, TDD block, an explicit `--model` — `cursor-grok-4.5-medium-fast` for a task's first implementation, `cursor-grok-4.5-high-fast` when the effort-escalation rule applies, and `composer-2.5` for every review-fix round).
   - First implementation: `cursor agent -p --trust --model cursor-grok-4.5-medium-fast "$(cat <<'EOF' ...prompt body... EOF)"`
   - Review fixes: `cursor agent -p --trust --continue --model composer-2.5 "$(cat <<'EOF' ...findings + TDD instructions... EOF)"`
