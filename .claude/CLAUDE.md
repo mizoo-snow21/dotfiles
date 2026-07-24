@@ -43,7 +43,7 @@ codex exec -m gpt-5.6-sol "Review this document. Do not nitpick. Only point out 
 codex exec resume --last -m gpt-5.6-sol "The document was updated. Review it again. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
 ```
 
-- **`< /dev/null` は必須**: stdin を閉じないと、バックグラウンド実行時に codex が stdin のパイプ待ちで永久にハングする（2026-07-09 実測: バックグラウンド化で 100% ハング・フォアグラウンド再実行で毎回 1〜3 分完了）。`codex exec` を呼ぶ**すべて**のコマンドに付けること
+- **`< /dev/null` is mandatory**: without closing stdin, a backgrounded codex hangs forever waiting on the stdin pipe (measured 2026-07-09: backgrounding hung 100% of the time, while the same command re-run in the foreground finished in 1–3 minutes every time). Append it to **every** command that invokes `codex exec`
 
 ### 4. Verification Before Done
 - Never mark a task complete without proving it works
@@ -99,11 +99,12 @@ codex exec resume --last -m gpt-5.6-sol "The document was updated. Review it aga
    │   └─ 1 task = 1 fresh Cursor session (no batching)
    │
    └─ Task Review (superpowers:subagent-driven-development task-reviewer-prompt —
-      spec compliance + code quality を1レビューで判定。superpowers 6.x で spec-reviewer が統合された)
+      one review returns both verdicts: spec compliance and code quality.
+      superpowers 6.x merged the separate spec-reviewer into this template)
        └─ ❌ → send fixes back to Cursor → re-review
 
 3. After all tasks (per branch, before PR)
-   ├─ Branch Review (superpowers:requesting-code-review code-reviewer — whole-branch merge review を1回)
+   ├─ Branch Review (superpowers:requesting-code-review code-reviewer — one whole-branch merge review)
    │   └─ ❌ → send fixes back to Cursor → re-review
    └─ superpowers:finishing-a-development-branch
 ```
@@ -115,7 +116,7 @@ codex exec resume --last -m gpt-5.6-sol "The document was updated. Review it aga
 - Only merge to main after all reviews pass and `finishing-a-development-branch` is complete
 
 ### Cursor Implementation Rules (Non-Negotiable)
-- **Model: default `cursor-grok-4.5-medium-fast`**（Cursor Grok 4.5 Medium Fast。旧エイリアス `grok-4.5-fast-high` と同一実体 — 名前に high とあるが effort は medium なので使わない） — invoke with `cursor agent --model cursor-grok-4.5-medium-fast`. Pass `--model` explicitly in scripts and prompts for reproducibility. Never pass Codex models (e.g. `gpt-5.3-codex-high`) — Codex is reviewer-side only (see Agent Roles)
+- **Model: default `cursor-grok-4.5-medium-fast`** (Cursor Grok 4.5 Medium Fast. Identical to the old alias `grok-4.5-fast-high` — despite "high" in that name its effort is medium, so do not use it) — invoke with `cursor agent --model cursor-grok-4.5-medium-fast`. Pass `--model` explicitly in scripts and prompts for reproducibility. Never pass Codex models (e.g. `gpt-5.3-codex-high`) — Codex is reviewer-side only (see Agent Roles)
 - **Effort escalation (per task)**: keep `cursor-grok-4.5-medium-fast` as the default. Escalate to `--model cursor-grok-4.5-high-fast` only for tasks involving complex refactoring or tricky multi-step debugging. Per-token price is the same (fast tier); high effort just consumes more reasoning tokens, so escalate only when it is likely to save review round-trips
 - **Split by round: Grok writes it, Composer fixes it** (user directive, 2026-07-25). The **first** implementation of a task goes to Grok (`cursor-grok-4.5-medium-fast`, or the high variant per the escalation rule above). Every **review-fix round after that** goes to Composer 2.5 — `cursor agent --continue --model composer-2.5`. Verify the exact id with `cursor agent models` before scripting it; ids change between Cursor releases and a wrong `--model` silently falls back
 - **All implementation MUST go through Cursor** — Claude Code subagents must NOT write implementation code. Claude Code is for planning, review, and research only
@@ -135,25 +136,26 @@ codex exec resume --last -m gpt-5.6-sol "The document was updated. Review it aga
   - First implementation: `cursor agent -p --trust --model cursor-grok-4.5-medium-fast "$(cat <<'EOF' ...prompt body... EOF)"`
   - Review fixes: `cursor agent -p --trust --continue --model composer-2.5 "$(cat <<'EOF' ...findings + TDD instructions... EOF)"`
 
-- **Impact 分析は dispatch 前に（GitNexus 等 impact ツールのあるプロジェクト）** — 「編集前に impact 必須」は Cursor 委譲では字義通り守れない（Cursor が編集主体で impact を持たず、diff が出た後にしか回せない）。代わりに **Cursor に dispatch する前**に plan が名指しした対象シンボルへ `impact({target, direction:"upstream"})` を回し blast radius を plan に記録する（この時点でコード未変更＝実質「編集前」）。HIGH/CRITICAL は dispatch 前のゲート（方針見直し or ユーザー承認）。可能なら blast radius を Cursor プロンプトに埋め込み「呼び出し元の契約を壊すな」と具体指示する。
-  - **計画外シンボルの取りこぼし対策（必須）**: pre-dispatch impact は plan が予見したシンボルしかカバーしない。Cursor 返却後・commit 前に `detect_changes()` で実際に変更されたシンボルを impact 済み集合と突き合わせ、未評価の差分があれば改めて `impact()` を回す。評価せず commit しない。想定外の広がり／HIGH・CRITICAL が出たら plan に取り込み直す（再 dispatch）か差し戻す。
-  - **インデックス鮮度が前提**: impact/detect_changes はインデックスを読むため古いと不正確。planning バッチ前に再インデックス（例: `node .gitnexus/run.cjs analyze`）してから回す。
+- **Run impact analysis before dispatch (projects with an impact tool such as GitNexus)** — "impact before editing" cannot be followed literally when the edit is delegated: Cursor does the editing, has no impact tool, and a diff only exists after the fact. Instead, **before dispatching to Cursor**, run `impact({target, direction:"upstream"})` on the symbols the plan names and record the blast radius in the plan (no code has changed yet, so this genuinely is "before the edit"). HIGH/CRITICAL is a pre-dispatch gate: rethink the approach or get user approval. When you can, embed the blast radius in the Cursor prompt with a concrete instruction not to break the callers' contracts.
+  - **Catching symbols the plan did not foresee (mandatory)**: pre-dispatch impact only covers what the plan predicted. After Cursor returns and before committing, run `detect_changes()` and reconcile the symbols actually changed against the set you already assessed; run `impact()` again on anything unassessed. Never commit unassessed changes. If the spread is wider than expected, or HIGH/CRITICAL appears, fold it back into the plan (re-dispatch) or send the work back.
+  - **A fresh index is a precondition**: impact/detect_changes read the index, so stale data gives wrong answers. Re-index before a planning batch (e.g. `node .gitnexus/run.cjs analyze`).
 
-### Two-Stage Review (superpowers skills — MANDATORY。superpowers 6.x 構成)
-- **Stage 1: Task Review（タスクごとに1回）** — never batch after all tasks are done
-  1. Invoke `Skill` tool with `superpowers:subagent-driven-development` to load the **task-reviewer-prompt** template（6.x で spec-reviewer と code-quality-reviewer が統合された。spec compliance = Part 1 / code quality = Part 2 を同一レビューで判定）
+### Two-Stage Review (superpowers skills — MANDATORY; superpowers 6.x layout)
+- **Stage 1: Task Review (once per task)** — never batch after all tasks are done
+  1. Invoke `Skill` tool with `superpowers:subagent-driven-development` to load the **task-reviewer-prompt** template (6.x merged the spec-reviewer and code-quality-reviewer: spec compliance = Part 1, code quality = Part 2, both in the same review)
   2. Following the loaded template, dispatch a task reviewer subagent via `Agent` tool (`subagent_type: "general-purpose"`)
-  3. Provide: task brief / implementer report / diff package の3点 + "Do Not Trust the Report" instructions + タスク固有の named risks
-  4. Must pass ✅（Approved）before committing the task
-- **Stage 2: Branch Review（ブランチごとに1回・PR 前）**:
+  3. Provide three things — task brief, implementer report, diff package — plus the "Do Not Trust the Report" instructions and the named risks specific to this task
+  4. Must pass ✅ (Approved) before committing the task
+- **Stage 2: Branch Review (once per branch, before the PR)**:
   1. Invoke `Skill` tool with `superpowers:requesting-code-review` to load the code-reviewer template
   2. Following the loaded template, dispatch a code reviewer subagent via `Agent` tool (`subagent_type: "general-purpose"`)
-  3. Provide: BASE_SHA, HEAD_SHA（ブランチ全体）, what was implemented, plan reference
+  3. Provide: BASE_SHA, HEAD_SHA (the whole branch), what was implemented, plan reference
   4. Must pass ✅ (or "With fixes") before creating the PR
   5. **If the task touches UI/frontend**: both superpowers reviewer templates are read-only, diff-based (they explicitly avoid re-executing tests the implementer already ran), so they cannot catch bugs that only surface by actually running the UI. For UI/frontend tasks, also drive the change in a real browser via the `webapp-testing` skill (Playwright: launch the local app, screenshot, check DOM/logs) before marking Quality Review passed — do not rely on diff-reading alone. Logic-only tasks keep the standard read-only review.
   6. **Attach the screenshot to the PR as evidence (UI/frontend PRs).** For any PR that changes UI/frontend behavior, commit at least one real-browser screenshot under `docs/pr-evidence/pr-<issue>/` and embed it in the PR body — diffs and unit tests alone cannot prove the change actually renders correctly. Before committing, review each image for sensitive data: use synthetic/test data only, and redact any real customer content, secrets/tokens, or internal URLs (committed images live permanently in git history).
+  7. **Embedded images MUST use an absolute blob URL, and you MUST confirm they actually render (user directive, 2026-07-25).** A repo-relative path such as `![x](docs/pr-evidence/pr-6595/preview.png)` does **not** render on GitHub — it silently degrades to a broken link, so the PR ships with no visible evidence even though the file is committed. Use `https://github.com/<owner>/<repo>/blob/<branch>/<path>?raw=true`. Then **open the PR page in a browser and look at it** before reporting the evidence as attached; a 200 from the raw URL is not proof that the PR body renders it. Cover the whole user-visible flow (entry point -> action -> result -> persistence after reload), not a single end-state shot — one screenshot per step that a reviewer would otherwise have to reproduce by hand.
 - **Both stages are separate subagents** — never combine, never do inline, never skip
-- **Always invoke the Skill tool first** — load the template before dispatching the Agent subagent（Skill ツールに未登録の場合はプラグインキャッシュのテンプレートファイルを直接 Read して従う）
+- **Always invoke the Skill tool first** — load the template before dispatching the Agent subagent (if the skill is not registered with the Skill tool, Read the template file directly from the plugin cache and follow it)
 - **Reviewer model**: Task Review defaults to **sonnet** (the latest mid-tier model in the harness; when new models ship, reinterpret as "default = latest mid-tier"). Branch Review follows the superpowers default — the most capable available model, always specified explicitly in the dispatch
 ### No-Skip Rule
 - **"I'm in a hurry", "user is sleeping", "it's a simple task" are NOT valid reasons to skip any step**
