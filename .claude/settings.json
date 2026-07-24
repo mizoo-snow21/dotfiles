@@ -7,7 +7,8 @@
   "permissions": {
     "allow": [
       "Bash(*)"
-    ]
+    ],
+    "defaultMode": "auto"
   },
   "hooks": {
     "PostToolUse": [
@@ -82,27 +83,6 @@
           }
         ]
       }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sid=$(jq -r '.session_id // \"default\"'); caffeinate -dimsu >/dev/null 2>&1 </dev/null & echo $! > \"/tmp/claude-caffeinate-$sid.pid\"",
-            "statusMessage": "Preventing Mac sleep for this session..."
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sid=$(jq -r '.session_id // \"default\"'); kill \"$(cat /tmp/claude-caffeinate-$sid.pid 2>/dev/null)\" 2>/dev/null; rm -f \"/tmp/claude-caffeinate-$sid.pid\""
-          }
-        ]
-      }
     ]
   },
   "statusLine": {
@@ -115,7 +95,7 @@
     "claude-mem@thedotmack": true,
     "ralph-loop@claude-plugins-official": true,
     "superpowers@superpowers-marketplace": true,
-    "slack@claude-plugins-official": true
+    "slack@claude-plugins-official": false
   },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
