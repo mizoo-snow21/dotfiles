@@ -71,6 +71,11 @@ codex exec resume --last -m gpt-5.6-sol "The document was updated. Review it aga
 - Ruthlessly iterate on these lessons until mistake rate drops
 - Review lessons at session start for relevant project
 
+### 8. Re-check Skills When the Kind of Action Changes
+- Re-check the available skills whenever the **kind** of action changes — browsing → creating, editing → publishing, investigating → implementing — **even when the tool stays the same**. Reaching for the same command you have been running all session is not evidence that the procedure is unchanged
+- Before creating anything that leaves the machine (GitHub issue, PR, comment, published doc, external message), confirm whether a skill covers it **before typing the first command**, not after
+- Trigger example: running `gh issue view` / `comment` / `edit` all session does not license `gh issue create` — that is a different action kind, and `github-issues` defines a different procedure for it (writes go through `gh api`; prefer org issue types over labels)
+
 ## SDD (Subagent-Driven Development) Flow
 
 ### Development Workflow (Mandatory)
