@@ -6,12 +6,16 @@ intellectronica/agent-skills@context7
 jgraph/drawio-mcp@drawio
 vercel-labs/skills@find-skills
 github/awesome-copilot@github-issues
+googleworkspace/cli@gws-calendar
+googleworkspace/cli@gws-shared
+googleworkspace/cli@gws-sheets
 github/awesome-copilot@playwright-generate-test
 wshobson/agents@python-code-style
 wshobson/agents@python-design-patterns
 wshobson/agents@python-performance-optimization
 wshobson/agents@python-project-structure
 wshobson/agents@python-testing-patterns
+anthropics/skills@skill-creator
 hashicorp/agent-skills@terraform-stacks
 hashicorp/agent-skills@terraform-test
 anthropics/skills@webapp-testing
