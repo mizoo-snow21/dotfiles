@@ -12,6 +12,7 @@ Thumbs.db
 *.tmp
 *.swp
 *.bak
+*.bak-*
 
 # Private/sensitive files
 .env
@@ -52,6 +53,10 @@ secrets/
 .claude/policy-limits.json
 .claude/remote-settings.json
 .claude/stats-cache.json
+.claude/gh-pr-status-cache.json
+
+# skill-creator eval/benchmark scratch output
+.claude/skills/*-workspace/
 .config/mcp/mcp.json.local
 .config/mcp/codex.config.toml.local
 Library/Application Support/Claude/claude_desktop_config.json
