@@ -1,3 +1,35 @@
+## Skill Routing
+
+**手順はここからロードする。この文書は「いつ・何を・ローカル差分」だけを持ち、「どうやって」は持たない。**
+表にあるスキルは、記憶で手順を再現せず必ず `Skill` ツールでロードする。
+スキルが未登録・破損していてロードできない場合は、**記憶で代替せず作業を止めてユーザーに復旧を報告する**（古い手順で走ると、この文書がスキルを潰していた元の問題に戻る）。
+
+| トリガ | Skill |
+|---|---|
+| plan / spec / todo / issue body / PR body をユーザーに見せる前 | `codex-review` |
+| 実装を Cursor に投げる | `cursor-delegate` |
+| 実装・バグ修正のコードを書く前 | `superpowers:test-driven-development` |
+| バグ・テスト失敗・想定外の挙動（修正案を出す前） | `superpowers:systematic-debugging` |
+| 機能を作る・仕様を決める前 | `superpowers:brainstorming` |
+| **仕様・要件をタスクに分解する / 計画を書く**（着手前） | `superpowers:writing-plans` |
+| 分解済みタスクをこのセッションで回す（実装＋タスクレビュー） | `superpowers:subagent-driven-development` |
+| 書かれた計画を別セッションで実行する（レビュー関門つき） | `superpowers:executing-plans` |
+| 独立したタスクが2件以上あり並列に回せる | `superpowers:dispatching-parallel-agents` |
+| ブランチ単位のレビュー（PR 前） | `superpowers:requesting-code-review` |
+| レビュー指摘を受け取ったとき | `superpowers:receiving-code-review` |
+| 完了 / 修正済み / テスト通過を宣言する前 | `superpowers:verification-before-completion` |
+| ブランチを畳む | `superpowers:finishing-a-development-branch` |
+| GitHub issue / PR の作成・更新 | `github-issues` |
+| ローカル UI/frontend の確認・スクリーンショット | `webapp-testing` |
+| コンテンツを Word 文書へ（貼り付け・docx 更新） | `word-clipboard` |
+| Task 表示が壊れた / Task ツールが見つからない | `task-display-triage` |
+| 変更の影響範囲を知りたい | `gitnexus-impact-analysis` |
+| セッションを畳む・引き継ぐ | `handover` |
+
+- **「同じコマンドをずっと打っている」は手順が変わっていない証拠にならない。** 行動の**種類**が変わったら（調査→実装、閲覧→作成、編集→公開）この表を引き直す。ツールが同じでも別種の行動なら別のスキルが要る
+- 機械の外に出るもの（GitHub issue、PR、コメント、公開文書、外部メッセージ）を作る前は、**最初のコマンドを打つ前に**表を確認する。後からではない
+- 例: `gh issue view` / `comment` / `edit` を一日中打っていても `gh issue create` は別種の行動 — `github-issues` を必ずロードする
+
 ## Core Principles
 
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
@@ -13,6 +45,8 @@
 ## Workflow Orchestration
 
 ### 1. Plan Node Default
+- 創作的な作業（機能追加・コンポーネント作成・挙動変更）の前に `Skill(superpowers:brainstorming)` — plan mode に入る前に
+- **タスク分解は自分の勘でやらない。`Skill(superpowers:writing-plans)` に従う**（粒度・刻み方・タスク間の契約はすべてスキルが規定している）
 - Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
 - If something goes sideways, STOP and re-plan immediately - don't keep pushing
 - Use plan mode for verification steps, not just building
@@ -27,27 +61,12 @@
 - One tack per subagent for focused execution
 
 ### 3. Plan / Todo Review Loop
-- Before showing any implementation plan, spec, or todo document to the user, review it with codex
-- Apply this to plan-style and todo-style docs in general, not just a single filename
-- Extend this to externally-published documents (issue / PR bodies): draft → codex review → zero findings → create, so it's right the first time. If a created item still needs changes, edit it in place (preserves audit context); avoid the create → close → reopen churn
-- Use GPT-5.6 Sol (`-m gpt-5.6-sol`) for these reviews
-- Explicitly tell codex to ignore nitpicks and only call out critical issues
-- Update the document and re-run the review until codex has no findings left
-- If you are updating an existing review, resume the latest codex session so the prior context is preserved
-
-```bash
-# Initial review
-codex exec -m gpt-5.6-sol "Review this document. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
-
-# Follow-up review after updates — resume the review's own session by id
-codex exec resume {review_session_id} -m gpt-5.6-sol "The document was updated. Review it again. Do not nitpick. Only point out critical issues: {document_full_path} (ref: {CLAUDE.md full_path})" < /dev/null
-```
-
-- **Record the session id from the initial review and resume that id.** Do not use `--last`: implementation sessions (under the quota fallback) and other tasks' reviews also create codex sessions, so the most recent one is frequently not the review you mean to continue.
-
-- **`< /dev/null` is mandatory**: without closing stdin, a backgrounded codex hangs forever waiting on the stdin pipe (measured 2026-07-09: backgrounding hung 100% of the time, while the same command re-run in the foreground finished in 1–3 minutes every time). Append it to **every** command that invokes `codex exec`
+- **トリガ**: implementation plan / spec / todo ドキュメント、および外部に出る文書（issue body / PR body）を、ユーザーに見せる前・作成する前
+- **手順**: `Skill(codex-review)`（文書レビューもスキル側でカバー済み）
+- **ローカル方針**: 作成済みの issue / PR に直しが要るときは **in-place 編集**。create → close → reopen の churn は監査文脈を壊すので避ける
 
 ### 4. Verification Before Done
+- 完了・修正済み・テスト通過を宣言する前に `Skill(superpowers:verification-before-completion)`
 - Never mark a task complete without proving it works
 - Diff behavior between main and your changes when relevant
 - Ask yourself: "Would a staff engineer approve this?"
@@ -62,21 +81,15 @@ codex exec resume {review_session_id} -m gpt-5.6-sol "The document was updated. 
 - Challenge your own work before presenting it
 
 ### 6. Autonomous Bug Fixing
-- When given a bug report: just fix it. Don't ask for hand-holding
-- Point at logs, errors, failing tests - then resolve them
-- Zero context switching required from the user
-- Go fix failing CI tests without being told how
+- **修正案を出す前に `Skill(superpowers:systematic-debugging)`。Autonomous とは「ユーザーの手を借りない」であって「手順を飛ばしてよい」ではない** — 原因を特定してから直す
+- その上で: バグ報告・エラー・失敗テスト・落ちた CI を渡されたら、やり方を聞き返さずに直しきる
+- ユーザーのコンテキストスイッチをゼロにする
 
 ### 7. Self-Improvement Loop
 - After ANY correction from the user: update `tasks/lessons.md` with the pattern
 - Write rules for yourself that prevent the same mistake
 - Ruthlessly iterate on these lessons until mistake rate drops
 - Review lessons at session start for relevant project
-
-### 8. Re-check Skills When the Kind of Action Changes
-- Re-check the available skills whenever the **kind** of action changes — browsing → creating, editing → publishing, investigating → implementing — **even when the tool stays the same**. Reaching for the same command you have been running all session is not evidence that the procedure is unchanged
-- Before creating anything that leaves the machine (GitHub issue, PR, comment, published doc, external message), confirm whether a skill covers it **before typing the first command**, not after
-- Trigger example: running `gh issue view` / `comment` / `edit` all session does not license `gh issue create` — that is a different action kind, and `github-issues` defines a different procedure for it (writes go through `gh api`; prefer org issue types over labels)
 
 ## SDD (Subagent-Driven Development) Flow
 
@@ -91,22 +104,15 @@ codex exec resume {review_session_id} -m gpt-5.6-sol "The document was updated. 
    └─ Write plan → codex review → fix → re-review → zero findings
 
 2. Per task (repeat for each task):
-   ├─ **Skill load (mandatory, at task start)**
-   │   ├─ Skill("superpowers:subagent-driven-development") — implementer / task-reviewer templates
-   │   └─ Skill("superpowers:test-driven-development") — TDD body to embed into Cursor prompt
-   │
+   ├─ Skill load (mandatory, at task start) — Skill Routing の表を引く
    ├─ Implement (Cursor only — mandatory)
    │   ├─ TDD: write test → confirm failure → implement → confirm pass
-   │   │   (Cursor prompt MUST embed the content of superpowers:test-driven-development, not just the 5-line summary)
    │   └─ 1 task = 1 fresh Cursor session (no batching)
-   │
-   └─ Task Review (superpowers:subagent-driven-development task-reviewer-prompt —
-      one review returns both verdicts: spec compliance and code quality.
-      superpowers 6.x merged the separate spec-reviewer into this template)
+   └─ Task Review (superpowers:subagent-driven-development)
        └─ ❌ → send fixes back to Cursor → re-review
 
 3. After all tasks (per branch, before PR)
-   ├─ Branch Review (superpowers:requesting-code-review code-reviewer — one whole-branch merge review)
+   ├─ Branch Review (superpowers:requesting-code-review) — one whole-branch merge review
    │   └─ ❌ → send fixes back to Cursor → re-review
    └─ superpowers:finishing-a-development-branch
 ```
@@ -118,48 +124,32 @@ codex exec resume {review_session_id} -m gpt-5.6-sol "The document was updated. 
 - Only merge to main after all reviews pass and `finishing-a-development-branch` is complete
 
 ### Cursor Implementation Rules (Non-Negotiable)
-- **Model: default `cursor-grok-4.5-medium-fast`** (Cursor Grok 4.5 Medium Fast. Identical to the old alias `grok-4.5-fast-high` — despite "high" in that name its effort is medium, so do not use it) — invoke with `cursor agent --model cursor-grok-4.5-medium-fast`. Pass `--model` explicitly in scripts and prompts for reproducibility. Never pass Codex models (e.g. `gpt-5.3-codex-high`) to Cursor — Codex is reviewer-side only (see Agent Roles), apart from the quota fallback below, where codex runs as its own CLI rather than as a Cursor model
-- **Effort escalation (per task)**: keep `cursor-grok-4.5-medium-fast` as the default. Escalate to `--model cursor-grok-4.5-high-fast` only for tasks involving complex refactoring or tricky multi-step debugging. Per-token price is the same (fast tier); high effort just consumes more reasoning tokens, so escalate only when it is likely to save review round-trips
-- **Split by round: Grok writes it, Composer fixes it** (user directive, 2026-07-25). The **first** implementation of a task goes to Grok (`cursor-grok-4.5-medium-fast`, or the high variant per the escalation rule above). Every **review-fix round after that** goes to Composer 2.5 — `cursor agent --continue --model composer-2.5`. Verify the exact id with `cursor agent models` before scripting it; ids change between Cursor releases and a wrong `--model` silently falls back
-- **All implementation MUST go through Cursor, except while Cursor's quota is exhausted** — Claude Code subagents must NOT write implementation code. Claude Code is for planning, review, and research only. The one sanctioned exception is the quota fallback below
-- **Quota fallback: when Cursor's quota is exhausted, delegate implementation to the codex CLI** (user directive, 2026-07-24 and again 2026-07-25). Grok and Composer draw on the same Cursor plan quota, so one hitting its limit usually means both are gone (`--model auto` may still answer, but once the user has moved implementation to codex it is no longer the sanctioned path). Dispatch with `codex exec -m gpt-5.6-sol` under workspace-write, resuming via `-c sandbox_mode`, and keep `< /dev/null` on every invocation. Everything else about the flow is unchanged: the TDD body still gets embedded in the prompt, one task still equals one fresh session, review fixes still go back to the same implementer session, and impact / detect_changes gates still apply. Return to the Grok-writes / Composer-fixes split as soon as the quota resets (monthly cycle)
-- **TDD stays inside the implementer session** (Cursor, or the codex CLI under the quota fallback) — never split tests and implementation into separate tasks. Before each dispatch, load `superpowers:test-driven-development` via the Skill tool and **embed its content** into the prompt (not just the 5-line summary below). The 5-line block is a minimum fallback, not a substitute:
-  ```
-  ## Implementation instructions
-  Implement using TDD:
-  1. Write failing tests first
-  2. Confirm tests fail
-  3. Write implementation code
-  4. Confirm tests pass
-  5. Report list of changed files
-  ```
-- **Fresh Cursor session per task** — never implement multiple tasks in a single Cursor invocation
-- **Route review fixes back to the implementer, never into Claude Code** — when two-stage review finds issues, send them to Cursor via `--continue --model composer-2.5` (see the Grok-writes / Composer-fixes split above) and re-review. Under the quota fallback, send them to the same codex session instead — record that session's id when you dispatch the implementer and resume it explicitly (`codex exec resume <SESSION_ID>`). Never use `--last` for this: plan reviews and other tasks also run codex sessions, so `--last` can resume a reviewer or a neighboring task and silently apply the fixes to the wrong work. The rule that binds is "the implementer fixes its own work," not the specific CLI
-- **Pass Cursor prompts inline (do NOT write to .md files)** — dispatch via heredoc directly. The pattern of `Write` to `/tmp/cursor-*.md` then `cat | cursor-agent` is forbidden (slows down execution). Codex auto-review is reserved for spec / plan documents only, not Cursor prompts. Inline prompts must still embed all mandatory CLAUDE.md requirements (reference files, TDD block, an explicit `--model` — `cursor-grok-4.5-medium-fast` for a task's first implementation, `cursor-grok-4.5-high-fast` when the effort-escalation rule applies, and `composer-2.5` for every review-fix round).
-  - First implementation: `cursor agent -p --trust --model cursor-grok-4.5-medium-fast "$(cat <<'EOF' ...prompt body... EOF)"`
-  - Review fixes: `cursor agent -p --trust --continue --model composer-2.5 "$(cat <<'EOF' ...findings + TDD instructions... EOF)"`
 
-- **Run impact analysis before dispatch (projects with an impact tool such as GitNexus)** — "impact before editing" cannot be followed literally when the edit is delegated: Cursor does the editing, has no impact tool, and a diff only exists after the fact. Instead, **before dispatching to Cursor**, run `impact({target, direction:"upstream"})` on the symbols the plan names and record the blast radius in the plan (no code has changed yet, so this genuinely is "before the edit"). HIGH/CRITICAL is a pre-dispatch gate: rethink the approach or get user approval. When you can, embed the blast radius in the Cursor prompt with a concrete instruction not to break the callers' contracts.
-  - **Catching symbols the plan did not foresee (mandatory)**: pre-dispatch impact only covers what the plan predicted. After Cursor returns and before committing, run `detect_changes()` and reconcile the symbols actually changed against the set you already assessed; run `impact()` again on anything unassessed. Never commit unassessed changes. If the spread is wider than expected, or HIGH/CRITICAL appears, fold it back into the plan (re-dispatch) or send the work back.
-  - **A fresh index is a precondition**: impact/detect_changes read the index, so stale data gives wrong answers. Re-index before a planning batch (e.g. `node .gitnexus/run.cjs analyze`).
+**コマンド・フラグ・モデル id・プロンプト構成・禁止事項の一覧は `Skill(cursor-delegate)`。** 以下はスキルに無いローカル方針だけ。
 
-### Two-Stage Review (superpowers skills — MANDATORY; superpowers 6.x layout)
-- **Stage 1: Task Review (once per task)** — never batch after all tasks are done
-  1. Invoke `Skill` tool with `superpowers:subagent-driven-development` to load the **task-reviewer-prompt** template (6.x merged the spec-reviewer and code-quality-reviewer: spec compliance = Part 1, code quality = Part 2, both in the same review)
-  2. Following the loaded template, dispatch a task reviewer subagent via `Agent` tool (`subagent_type: "general-purpose"`)
-  3. Provide three things — task brief, implementer report, diff package — plus the "Do Not Trust the Report" instructions and the named risks specific to this task
-  4. Must pass ✅ (Approved) before committing the task
-- **Stage 2: Branch Review (once per branch, before the PR)**:
-  1. Invoke `Skill` tool with `superpowers:requesting-code-review` to load the code-reviewer template
-  2. Following the loaded template, dispatch a code reviewer subagent via `Agent` tool (`subagent_type: "general-purpose"`)
-  3. Provide: BASE_SHA, HEAD_SHA (the whole branch), what was implemented, plan reference
-  4. Must pass ✅ (or "With fixes") before creating the PR
-  5. **If the task touches UI/frontend**: both superpowers reviewer templates are read-only, diff-based (they explicitly avoid re-executing tests the implementer already ran), so they cannot catch bugs that only surface by actually running the UI. For UI/frontend tasks, also drive the change in a real browser via the `webapp-testing` skill (Playwright: launch the local app, screenshot, check DOM/logs) before marking Quality Review passed — do not rely on diff-reading alone. Logic-only tasks keep the standard read-only review.
-  6. **Attach the screenshot to the PR as evidence (UI/frontend PRs).** For any PR that changes UI/frontend behavior, commit at least one real-browser screenshot under `docs/pr-evidence/pr-<issue>/` and embed it in the PR body — diffs and unit tests alone cannot prove the change actually renders correctly. Before committing, review each image for sensitive data: use synthetic/test data only, and redact any real customer content, secrets/tokens, or internal URLs (committed images live permanently in git history).
-  7. **Embedded images MUST use an absolute blob URL, and you MUST confirm they actually render (user directive, 2026-07-25).** A repo-relative path such as `![x](docs/pr-evidence/pr-6595/preview.png)` does **not** render on GitHub — it silently degrades to a broken link, so the PR ships with no visible evidence even though the file is committed. Use `https://github.com/<owner>/<repo>/blob/<branch>/<path>?raw=true`. Then **open the PR page in a browser and look at it** before reporting the evidence as attached; a 200 from the raw URL is not proof that the PR body renders it. Cover the whole user-visible flow (entry point -> action -> result -> persistence after reload), not a single end-state shot — one screenshot per step that a reviewer would otherwise have to reproduce by hand.
-- **Both stages are separate subagents** — never combine, never do inline, never skip
-- **Always invoke the Skill tool first** — load the template before dispatching the Agent subagent (if the skill is not registered with the Skill tool, Read the template file directly from the plugin cache and follow it)
-- **Reviewer model**: Task Review defaults to **sonnet** (the latest mid-tier model in the harness; when new models ship, reinterpret as "default = latest mid-tier"). Branch Review follows the superpowers default — the most capable available model, always specified explicitly in the dispatch
+- **実装は必ず Cursor 経由**（quota 切れ時は codex CLI へフォールバック、手順はスキル側）— Claude Code のサブエージェントに実装コードを書かせない。Claude Code は計画・レビュー・調査のみ
+- **1 task = 1 fresh session** — 複数タスクを1回の invocation にまとめない
+- **TDD を implementer セッションの外に出さない** — テストと実装を別タスクに割らない。dispatch 前に `Skill(superpowers:test-driven-development)` をロードし、**その本文をプロンプトに埋め込む**（Cursor は Claude Code のスキルを読めないので、名前で参照しただけの制約は届かない）。要約での代用は不可。ロードできないなら dispatch せず復旧する
+- **Split by round: Grok writes it, Composer fixes it** (user directive, 2026-07-25) — 初回実装は Grok、レビュー修正ラウンドは Composer 2.5
+- **レビュー指摘は Claude Code で直さず implementer セッションに差し戻す** — 束縛するルールは「実装した本人が自分の仕事を直す」であって特定の CLI ではない
+- **プロンプトはインラインの heredoc で渡す** — `/tmp/cursor-*.md` に Write して `cat |` で流す形は禁止（遅い）。codex 自動レビューは spec / plan 文書のみが対象で、Cursor プロンプトは対象外
+
+- **Run impact analysis before dispatch (projects with an impact tool such as GitNexus)** — "impact before editing" cannot be followed literally when the edit is delegated: Cursor does the editing, has no impact tool, and a diff only exists after the fact. Instead, **before dispatching to Cursor**, run impact analysis on the symbols the plan names and record the blast radius in the plan (no code has changed yet, so this genuinely is "before the edit"). HIGH/CRITICAL is a pre-dispatch gate: rethink the approach or get user approval. When you can, embed the blast radius in the Cursor prompt with a concrete instruction not to break the callers' contracts.
+  - **Catching symbols the plan did not foresee (mandatory)**: pre-dispatch impact only covers what the plan predicted. After Cursor returns and before committing, reconcile the symbols actually changed against the set you already assessed, and re-run impact on anything unassessed. Never commit unassessed changes. If the spread is wider than expected, or HIGH/CRITICAL appears, fold it back into the plan (re-dispatch) or send the work back.
+  - **A fresh index is a precondition** — impact tools read an index, so stale data gives wrong answers. Re-index before a planning batch. ツールの使い方は `Skill(gitnexus-impact-analysis)` / `Skill(gitnexus-cli)`
+
+### Two-Stage Review (MANDATORY)
+
+手順・テンプレート本文・reviewer に渡す材料はすべてスキル側にある。ここはローカル方針のみ。
+
+- **Stage 1: Task Review（タスクごとに1回）** — `Agent(task-reviewer)` を dispatch（専用 agent 定義。テンプレは agent 自身が `superpowers:subagent-driven-development` からロードする）。渡すもの: task brief / implementer 報告 / diff package / named risks。タスクをコミットする前に合格が要る。全タスク完了後にまとめてやらない
+- **Stage 2: Branch Review（ブランチごとに1回・PR 前）** — `Agent(branch-reviewer)` を dispatch（テンプレは `superpowers:requesting-code-review` から自動ロード）。渡すもの: BASE_SHA / HEAD_SHA / 何を実装したか（plan 参照）。PR 作成前に合格（Yes / With fixes）が要る
+- **両ステージは別々のサブエージェント** — 統合しない、インラインでやらない、飛ばさない
+- **Reviewer model**: task-reviewer は定義で **sonnet** 固定（最新ミドル層の意。新モデルが出たら定義を読み替える）。branch-reviewer は `inherit` — セッションが最上位モデルで走っていないときだけ、dispatch 時に model で最上位を明示する
+- **UI/frontend を触ったタスクは diff レビューだけでは不十分** — superpowers の reviewer テンプレートはどちらも read-only / diff ベースで、実装者が回したテストをあえて再実行しない。実際に動かさないと出ないバグは原理的に捕まらない。`Skill(webapp-testing)` で実ブラウザに載せて確認してから Quality Review を通す。ロジックのみのタスクは read-only レビューのままでよい
+- **UI/frontend の PR はスクリーンショットを証跡として添付する** — `docs/pr-evidence/pr-<issue>/` にコミットして PR 本文に埋める。diff と unit test では実際に描画されることを証明できない。コミット前に各画像の機微情報を確認: 合成・テストデータのみを使い、実顧客データ・秘密情報・内部 URL は伏せる（画像は git 履歴に永久に残る）
+- **埋め込み画像は絶対 blob URL を使い、実際に描画されることを目視確認する**（user directive, 2026-07-25）— `![x](docs/pr-evidence/...)` のようなリポジトリ相対パスは GitHub で**描画されず**、黙ってリンク切れになる。ファイルはコミット済みなのに証跡が見えない PR が出来上がる。`https://github.com/<owner>/<repo>/blob/<branch>/<path>?raw=true` を使い、**PR ページをブラウザで開いて目で見てから**「証跡を添付した」と報告する。raw URL が 200 を返すことは PR 本文が描画される証明にならない。エントリポイント → 操作 → 結果 → リロード後の永続化まで、レビュアーが手で再現せずに済む粒度で1ステップ1枚を揃える
+
 ### No-Skip Rule
 - **"I'm in a hurry", "user is sleeping", "it's a simple task" are NOT valid reasons to skip any step**
 - If you cannot follow the workflow, tell the user BEFORE starting — never silently skip
@@ -178,8 +168,8 @@ At the start of a session, if the working project's CLAUDE.md contains a `<!-- P
 - **Cursor delegation is the default implementation path** (see SDD). Independent tasks may run as multiple Cursor sessions in parallel (1 task = 1 fresh session; keep dependent tasks ordered). If the harness auto-backgrounds a long run, that's fine as long as you wait for completion and report the result.
 - **Destructive operations (force-push / delete / overwrite) and changes needing user judgment run in the foreground** and are shown before executing.
 - **Browser automation (Claude-in-Chrome): reuse one tab per session.** Navigate within the existing tab instead of opening new ones, and don't call `tabs_context_mcp createIfEmpty` repeatedly. Close tabs you opened with `tabs_close_mcp` when the work is done. **Why:** when the tab group drops mid-session, recreating it spawns a fresh tab and orphans the old one (outside the current group → not API-closable), so orphan "Claude" tabs pile up and clutter the user's browser. Minimize group recreation and clean up as soon as extra tabs appear.
-- **Real-time task display uses the Task tools (TodoWrite is retired).** At the start of any multi-step work, load them with `ToolSearch("select:TaskCreate,TaskUpdate,TaskList")`, create tasks with TaskCreate, and flip status to in_progress / completed immediately as work proceeds so the TUI task list stays live. **Why:** the 2026-07 harness update replaced TodoWrite with the Task tools AND made them deferred (ToolSearch-gated), so no tasks — and no display — appear unless they are loaded explicitly. If ToolSearch finds no Task tools, first check Anthropic's remote kill-switch: `tengu_vellum_ash` in `~/.claude.json` cachedGrowthBookFeatures disables tasks only when an array entry is a substring of the current model id. On a confirmed match it is Anthropic-side (not cmux, not local settings); with no match, check session env / Claude Code version / infra status instead. **A markdown checklist is NOT an acceptable substitute for the real-time task display (user directive, 2026-07-23).** If the Task tools are unavailable, report that to the user immediately as a blocker and treat restoring the real display as part of the job: re-run ToolSearch, try `claude update` + session restart, and check the kill-switch as above. As a last resort, setting `CLAUDE_CODE_ENABLE_TASKS=false` in settings env re-enables the legacy TodoWrite checklist path (code-verified in 2.1.217/218: TodoWrite is enabled exactly when tasks are disabled and the kill-switch doesn't match) — but propose it to the user first; it disables the new Task system session-wide. Never silently degrade to plain-text task lists. Verified 2026-07-23: gating code is identical in 2.1.217/2.1.218, and cmux's wrapper only injects hooks (it defensively *unsets* the inherited `CLAUDE_CODE_CHILD_SESSION` marker; it never disables tasks).
-- **Which browser tool: local UI/frontend dev → the `webapp-testing` skill (Playwright); real logged-in browser / external sites → Claude in Chrome.** For screenshots, DOM/console inspection, or driving the app under development (localhost / the code in this repo), invoke the **`webapp-testing`** skill (installed globally at `~/.claude/skills/webapp-testing`) — do NOT default to Claude-in-Chrome just because the word "screenshot" was used. Reserve Claude in Chrome for tasks that genuinely need the user's real browser session (authenticated sites, external pages) or when "Chrome" is explicitly requested. The trap: Claude-in-Chrome's MCP tools are always loaded and prominent, so "take a screenshot" drifts to them by default even though webapp-testing is the right tool for dev work.
+- **Real-time task display uses the Task tools (TodoWrite is retired).** At the start of any multi-step work, load them with `ToolSearch("select:TaskCreate,TaskUpdate,TaskList")`, create tasks with TaskCreate, and flip status to in_progress / completed as work proceeds so the TUI task list stays live. **A markdown checklist is NOT an acceptable substitute (user directive, 2026-07-23) — never silently degrade to plain-text task lists.** If the Task tools are missing or the display breaks, report it to the user as a blocker and run `Skill(task-display-triage)` — the diagnostic order (kill-switch check, env, version, what needs user approval) lives there.
+- **Which browser tool: local UI/frontend dev → `Skill(webapp-testing)` (Playwright); real logged-in browser / external sites → Claude in Chrome.** For screenshots, DOM/console inspection, or driving the app under development (localhost / the code in this repo), invoke **`webapp-testing`** — do NOT default to Claude-in-Chrome just because the word "screenshot" was used. Reserve Claude in Chrome for tasks that genuinely need the user's real browser session (authenticated sites, external pages) or when "Chrome" is explicitly requested. The trap: Claude-in-Chrome's MCP tools are always loaded and prominent, so "take a screenshot" drifts to them by default even though webapp-testing is the right tool for dev work.
 
 ## Git Safety
 

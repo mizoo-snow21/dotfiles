@@ -10,6 +10,7 @@
     ],
     "defaultMode": "auto"
   },
+  "model": "sonnet",
   "hooks": {
     "PostToolUse": [
       {
@@ -80,6 +81,28 @@
             "command": "~/.claude/bin/codex-foreground-guard.sh",
             "timeout": 10,
             "statusMessage": "Enforcing codex foreground rule..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/bin/cursor-delegate-gate.sh",
+            "timeout": 10,
+            "statusMessage": "Checking cursor-delegate skill is loaded..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/bin/github-issues-gate.sh",
+            "timeout": 10,
+            "statusMessage": "Checking github-issues skill is loaded..."
           }
         ]
       }
