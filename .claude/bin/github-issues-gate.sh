@@ -17,10 +17,38 @@ skill_loaded() {
   grep -Eq "\"name\":\"Skill\",\"input\":\{\"skill\":\"$1\"[,}]" "$transcript"
 }
 
-case "$cmd" in
-  *"gh issue create"*) ;;
-  *) exit 0 ;;
-esac
+# 作成だけを対象にする。閲覧・コメント（/issues/<n>/comments）・編集（/issues/<n> -X PATCH）は素通し。
+# gh api は -f / -F を付けると -X 無しでも POST になるので、明示 POST だけ見ると漏れる。
+# スキル本体が「MCP は issue 作成に未対応なので gh api を使え」と指示しているため、
+# gh issue create だけ見ていると推奨経路そのものが素通りする。
+is_issue_create() {
+  case "$cmd" in
+    *"gh issue create"*) return 0 ;;
+  esac
+  case "$cmd" in
+    *"gh api"*) ;;
+    *) return 1 ;;
+  esac
+  # GraphQL 経路
+  case "$cmd" in
+    *createIssue*) return 0 ;;
+  esac
+  # 明示 GET は読み取り。GET はクエリパラメータも -f で渡すため、先に除外しないと誤爆する。
+  case "$cmd" in
+    *"-X GET"*|*"-XGET"*|*"--method GET"*) return 1 ;;
+  esac
+  # REST の作成先は POST /repos/{owner}/{repo}/issues だけ。
+  # search/issues（検索）や /issues/<n>/... （コメント・編集・ラベル）は対象外。
+  printf '%s' "$cmd" \
+    | grep -Eq 'repos/[^/[:space:]]+/[^/[:space:]]+/issues([^/[:alnum:]]|$)' || return 1
+  # gh api は -f / -F / --input があれば -X なしでも POST になる。
+  case "$cmd" in
+    *"-X POST"*|*"-XPOST"*|*"--method POST"*|*" -f "*|*" -F "*|*"--input"*) return 0 ;;
+  esac
+  return 1
+}
+
+is_issue_create || exit 0
 
 skill_loaded "github-issues" && exit 0
 
