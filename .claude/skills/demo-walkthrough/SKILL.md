@@ -20,12 +20,11 @@ Run a step-by-step Playwright MCP walkthrough of a demo flow, capturing screensh
    mkdir -p <project>/demo-video/frames
    ```
 
-3. **Start dev server** if not already running:
+3. **Start dev server** if not already running. Use the project's actual dev command and port (check `package.json`), launch it as a managed background task (not a bare `&`, which dies with the shell), then poll until it actually responds:
    ```bash
-   npm run dev &
-   # Wait for server to be ready
-   curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
+   for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:<port> && break; sleep 1; done
    ```
+   If the server never becomes ready, abort and report it — walking through a dead app produces misleading step failures.
 
 4. **Execute each step** using Playwright MCP tools:
    For each step in the flow:
@@ -46,6 +45,8 @@ Run a step-by-step Playwright MCP walkthrough of a demo flow, capturing screensh
 ## Rules
 
 - Always use `browser_snapshot` (not screenshot) to determine element refs before clicking
+- When picking element refs from a snapshot, prefer role + accessible name; fall back to exact text match only when the element has neither
+- If a step opens a new tab/popup, switch to it and continue verification there — asserting against the original page gives false failures
 - Use descriptive filenames: `01-home.png`, `02-projects.png`, `03-project-detail.png`, etc.
 - If a step fails, report it but continue with remaining steps
 - Take a `fullPage` screenshot when the page has significant below-the-fold content

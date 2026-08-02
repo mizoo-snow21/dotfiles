@@ -21,11 +21,10 @@ Generate and execute a Playwright script that records a video walkthrough of a d
    mkdir -p <project>/demo-video
    ```
 
-3. **Ensure dev server is running**:
+3. **Ensure dev server is running.** Use the project's actual dev command and port (check `package.json`) — the same port goes into `BASE` in the script below. Launch as a managed background task (not a bare `&`), then poll until it responds:
    ```bash
-   npm run dev &
-   # Wait for server to be ready
-   curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
+   ok=""; for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:<port> && { ok=1; break; }; sleep 1; done
+   [ -n "$ok" ] || { echo "dev server not ready — aborting"; exit 1; }
    ```
 
 4. **Generate the Playwright script**: Write a TypeScript file at `e2e/demo-walkthrough-video.ts`:
@@ -42,7 +41,7 @@ Generate and execute a Playwright script that records a video walkthrough of a d
        const context = await browser.newContext({
            viewport: { width: 1440, height: 900 },
            recordVideo: {
-               dir: path.join(__dirname, '..', 'demo-video'),
+               dir: path.resolve('demo-video'), // cwd-relative — __dirname is undefined in ESM projects
                size: { width: 1440, height: 900 },
            },
        });
@@ -61,7 +60,7 @@ Generate and execute a Playwright script that records a video walkthrough of a d
 
    Key principles for the script:
    - Use `sleep()` between steps for visual pacing (1500-3000ms)
-   - Use `page.click('text=...')` or `page.click('button:has-text("...")')` for interactions
+   - Prefer `page.getByRole('button', { name: '...' }).click()` for interactions; fall back to `text=` / `:has-text()` only when the element has no role or accessible name
    - Use `page.waitForURL()` after navigation actions
    - Use `page.evaluate(() => window.scrollTo(...))` to show below-the-fold content
    - Add extra pauses (2000-3000ms) on important screens like dashboards and analysis results
@@ -82,14 +81,16 @@ Generate and execute a Playwright script that records a video walkthrough of a d
 ## Rules
 
 - Always use `headless: true` — video recording works in headless mode
+- Run the script from the project root and avoid `__dirname` in the template — it is undefined in ESM projects; use cwd-relative paths like `path.resolve('demo-video')`
 - Default viewport: 1440x900 (widescreen, good for demos)
 - Default video size matches viewport
 - Use `context.close()` (not `browser.close()`) first — this finalizes the video file
 - The script MUST `await context.close()` before `browser.close()`, otherwise the video may be truncated
-- If Playwright is not installed, run `npx playwright install chromium` first
+- If the `playwright` npm package is missing, install it first (`npm i -D playwright`) — `npx playwright install chromium` only downloads the browser binary, not the package the script imports
 - The video format is always `.webm` (VP8 codec)
 - For long flows, keep total duration under 60 seconds for shareability
 - If the user provides an existing script path, execute it directly instead of generating a new one
+- If the flow opens a popup/new tab, register the listener before the click (`const popupPromise = page.waitForEvent('popup');` → click → `await popupPromise`) — a listener added after the click misses the event
 
 ## Example invocation
 
