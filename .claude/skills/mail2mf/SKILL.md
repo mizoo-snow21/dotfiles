@@ -49,6 +49,14 @@ python3 "$SKILL_DIR/scripts/scan_mail.py" extract --out ~/.local/state/mail2mf/d
 python3 "$SKILL_DIR/scripts/mf_api.py" upload <saved files>...
 ```
 
+- **Approval is per attachment, extraction is per message — reconcile the two before
+  uploading.** `extract` pulls *every* pending attachment on that message_id, so a mail
+  carrying several PDFs (e.g. 領収書 + 請求書, or a statement bundling multiple months) will
+  yield files the user never approved. Pass to `upload` **only the saved files whose
+  attachment key the user approved in step 2**; diff the extractor's output list against
+  the approved keys and, for anything left over, either `discard <key>` it or go back and
+  ask. Never glob the download directory into `upload`.
+
 - Extraction opens the message via `message://` so Mail auto-downloads the attachment
   bodies, then polls `Attachments/<ROWID>/` (~15s per message, 90s timeout; `open`
   launches Mail automatically). On failure (non-zero exit), the stderr message tells
@@ -75,19 +83,119 @@ python3 "$SKILL_DIR/scripts/mf_api.py" upload <saved files>...
 
 ### 4. Reconciliation report
 
+**Read the PDFs before choosing the query window.** Everything downstream — which
+transactions you even fetch, and which one each receipt pairs with — depends on the
+receipt's *printed* payment date, not the date the mail arrived. Vendors re-send old
+receipts in batches, so the two can sit months apart, sometimes in different tax years
+(the PROGRIT case under "Journalizing" below). If you size the window from the email
+dates, a re-sent receipt's real charge falls outside the fetched range entirely and no
+amount of careful matching afterwards can recover it.
+
+**Read them while you still can.** The printed date is only recoverable from the file
+itself, and the state does not keep one: an `uploaded` entry holds
+`file_id / at / date / sender / subject / amounts` — an MF Box id and *email*-derived
+metadata, no local path — while `extract` refuses to re-fetch settled items and
+`mf_api.py` has no download command. In practice `~/.local/state/mail2mf/downloads/` is
+emptied after a run, so **earlier runs' evidence can't be re-read programmatically**. The
+files themselves are not lost — they're in Box, and the UI's per-file ⋮ → ダウンロード will
+hand one back — but that's a manual retrieval, fine for a handful and unworkable as the
+basis of an automated reconciliation. So extract the printed values during step 3, while
+the PDFs are still on disk, and carry them into this step.
+
+That splits the evidence set in two, and the report must not blur them:
+
+- **This run's evidence** — printed date and amount known. Match on those.
+- **Earlier runs' evidence** — only the email date survives. Match on it if you must, but
+  label those rows *印字日未確認* so nobody reads a pairing as verified when it rests on a
+  date the skill itself warns is unreliable.
+
+Because that second group can hide a re-sent receipt whose real charge sits far outside an
+email-derived window, **widen the window rather than trust it**: start 3 days before the
+earliest of (this run's earliest printed date, the state's earliest email date).
+
+Watch the trap the PROGRIT case sets, though. Those receipts were e-mailed in 2026-02 for
+charges in 2025-03…07 — the *previous* tax year. An email-derived start sits *after* the
+real charge, and so does a "just start at the fiscal-year start" fallback; both would miss
+it while looking like a clean run. A window anchored on dates you couldn't read is not a
+safety net.
+
+`transactions` spans at most 366 days, so reaching further back means walking backwards in
+≤366-day chunks. Do that whenever evidence might predate the window. If you'd rather not
+(or the charge genuinely isn't there), leave that evidence under **"needs manual matching"**
+and state that its printed date was never read — an explicit unreconciled row is something
+the user can fix, a confident wrong pairing is not.
+
+*Worth fixing at the source:* have `mark --uploaded` also persist the printed date (and the
+saved filename) alongside `file_id`. Then later runs stop depending on files that no longer
+exist, and this whole caveat goes away.
+
+So step 4 runs in this order:
+
 ```bash
-# Span the WHOLE evidence set, not just the latest scan window. Start 3 days BEFORE the
-# earliest uploaded-evidence date (min of state `uploaded[*].date` minus 3 days, so the
-# ±3-day match rule can still reach transactions that predate the evidence; fall back to
-# the fiscal-year start), through today. Using the scan range here would falsely flag
-# older evidence (uploaded in past runs) as unmatched.
-python3 "$SKILL_DIR/scripts/mf_api.py" transactions --from <earliest evidence date − 3d> --to <today>
+# 4a. Printed date + amount — captured in step 3 for this run's files, while they exist.
+pdftotext -layout <receipt>.pdf | grep -E '支払い日|領収日|会計日|ご利用日|取引日'
+pdftotext -layout <receipt>.pdf | grep -Eo '[¥￥][0-9,]+'
+
+# Scanned receipts frequently have NO text layer, and pdftotext returns empty rather than
+# failing loudly. Check, and render those pages to read them — never quietly fall back to
+# the email date, which is the very value this step exists to replace.
+pdftotext -layout <receipt>.pdf - | tr -d '[:space:]' | wc -c   # 0 → image-only scan
+pdftoppm -png -r 140 -f 1 -l 1 <receipt>.pdf <out-prefix>       # then read the PNG
+
+# 4b. Decide the full range to cover:
+#       start = earliest of (this run's earliest PRINTED date, the state's earliest email
+#               date) minus 3 days  — never the fiscal-year start, which can sit after a
+#               re-sent receipt's real charge
+#       end   = today
+#     If evidence exists whose printed date you could not read, extend `start` back far
+#     enough to cover the periods it could belong to (a prior tax year, in the PROGRIT
+#     case), or accept that it stays unmatched — see below.
+
+# 4c. `transactions` accepts at most a 366-day span, and [start, end] is often longer.
+#     Partition it into consecutive, non-overlapping slices of ≤366 days and query each:
+#       slice 1: start            → min(start + 366d, end)
+#       slice 2: previous end + 1d → min(that + 366d, end)
+#       …until you reach `end`.
+python3 "$SKILL_DIR/scripts/mf_api.py" transactions --from <slice start> --to <slice end>
+#     Merge every slice (dedupe by transaction id) before matching, so the ±3-day rule
+#     sees one continuous set rather than per-slice fragments.
+#     Stopping short of full coverage is a valid choice — but then the evidence that could
+#     live in an unqueried period belongs in "needs manual matching", never paired with a
+#     nearby-looking charge from a period you did fetch.
 ```
+
+Span the WHOLE evidence set, not just the latest scan window — evidence uploaded in past
+runs is still in play, and using the scan range would falsely flag it as unmatched.
 
 Reconcile transactions (payments) against uploaded evidence and output a Markdown
 report. The evidence set is the state file's `uploaded` entries (each carries amount /
 date / sender / subject), so evidence uploaded in past runs is included too — which is
 why the query window above must cover all of them.
+
+**Re-read each PDF and match on its *printed* payment date and amount — the state's values
+came from the email and cannot be trusted for pairing.** Vendors re-send old receipts in
+batches, so the mail date can sit months away from the actual charge, sometimes in a
+different tax year (the PROGRIT case under "Journalizing" below). Matching on the email
+date quietly pairs a receipt with the wrong transaction, and because the ±3-day rule then
+finds *some* nearby charge, the error looks like a successful match. Extract the real
+figures before pairing:
+
+```bash
+pdftotext -layout <receipt>.pdf | grep -E '支払い日|領収日|会計日|ご利用日|取引日'
+pdftotext -layout <receipt>.pdf | grep -Eo '[¥￥][0-9,]+'
+```
+
+Then reconcile using those values, keeping the email date only as a fallback label. Where
+the two disagree, say so in the report — the gap is itself a signal worth showing.
+
+Scanned receipts often have **no text layer at all**, and `pdftotext` returns nothing
+rather than failing loudly. Check before trusting an empty result, and render those pages
+to read them instead of silently reverting to the email date:
+
+```bash
+pdftotext -layout <receipt>.pdf - | tr -d '[:space:]' | wc -c   # 0 → image-only scan
+pdftoppm -png -r 140 -f 1 -l 1 <receipt>.pdf <out-prefix>       # then read the PNG
+```
 
 Match **one-to-one**: consume each transaction and each evidence item at most once.
 Payment emails are full of identical amounts (six PROGRIT charges of ¥21,780, several
@@ -154,6 +262,48 @@ Surface the number and your guess, and confirm the actual 税区分 with the use
 税理士 rather than setting it blindly. The number lives on the retained receipt, not in a
 per-journal field; MF card auto-journals default 課仕10% to 適格, so foreign/unregistered
 vendors are the ones to review.
+
+**Reconcile against BOTH `transactions` and `journals` — a receipt missing from the card
+feed is not necessarily uncounted.** Cash-paid receipts are often already journalized by
+MF's AI-OCR (with evidence attached), and those journals carry `transaction_id: null`, so
+they never appear in the card feed. Checking only `getTransactions` makes them look
+unmatched. (Real case, 2026-07-25: 11 receipts were reported as "no matching charge" on
+that basis; a manual journal was then created for 神楽坂前田 ¥73,800 and **double-counted**
+against the existing AI-OCR journal No.7 — it had to be deleted through the UI.) Before
+creating any manual journal, query `getJournals` for the same period and match by amount.
+
+**Excluded feed rows cannot be journalized through the API.** A transaction with
+`journalizing_status: excluded` (対象外) makes `postTransactionJournalize` fail with
+"The specified transaction has already been journalized". Clearing 対象外 is UI-only. The
+workaround is a manual `postJournals` entry — but record in its `memo` that the feed row
+is still 対象外, because clearing it later would double-count.
+
+**`putJournals` preserves `voucher_file_ids`.** The parameter doesn't exist on the schema,
+yet attached evidence survives an update (verified). So fixing an existing AI-OCR journal's
+貸方 or 税区分 through the API is safe and does not detach its receipt.
+
+**AI-OCR journals have two recurring defects worth checking against the receipt:**
+- *貸方 booked as 現金 even when the receipt says クレジット.* Leaves 現金 balance wrong.
+  Change to 未払金 + the card's 補助科目; identify which card via the feed row's
+  `connected_sub_account_id` → matching `sub_account_id` in `getConnectedAccounts`.
+- *軽減税率 8% silently booked as 課仕10%.* Confectionery / gifts / takeaway food are the
+  usual victims. Switch to `課仕(軽)8%` and the computed tax lands exactly on the printed
+  figure (real cases: GENDY ¥8,640 785→**640**, 東急百貨店 ¥5,400 490→**400**, both matching
+  the receipt after the fix).
+
+**Do NOT use 仕訳帳 → 「証憑の一括自動添付」.** It matches Box files to journals by date and
+amount, but it also attaches to journals that **already have evidence**, and the dialog
+states 実行後の一括取り消しはできません. Detection trick: it reports a candidate count for the
+filtered period — if narrowing the period collapses the count (2026-07-25: 9 for the full
+year vs 2 for June onward), the difference is landing on already-evidenced journals. Attach
+one at a time instead.
+
+**Where the 登録番号 goes.** Not the 取引先 master — filling it with one-off restaurants and
+taxis buries the real 取引先 and, more importantly, the registration number is **not a 帳簿
+記載事項** (the 仕入税額控除 book requirements are 相手方名称 / 取引年月日 / 取引内容 / 対価の額;
+the number only has to be on the retained 領収書). What actually drives the tax calculation
+is each journal's `invoice_kind` (`INVOICE_KIND_QUALIFIED` / `_UNQUALIFIED_80` /
+`_NOT_TARGET`) — set that, and keep the receipt in Box.
 
 **Attaching (UI):** 仕訳帳 → paperclip in the 証憑 column → panel → ファイルを追加 →
 クラウドBoxから選択 → filter (substring match; use the receipt number e.g. `2235-8792` or the

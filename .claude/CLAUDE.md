@@ -1,34 +1,34 @@
 ## Skill Routing
 
-**手順はここからロードする。この文書は「いつ・何を・ローカル差分」だけを持ち、「どうやって」は持たない。**
-表にあるスキルは、記憶で手順を再現せず必ず `Skill` ツールでロードする。
-スキルが未登録・破損していてロードできない場合は、**記憶で代替せず作業を止めてユーザーに復旧を報告する**（古い手順で走ると、この文書がスキルを潰していた元の問題に戻る）。
+**Procedures are loaded from here. This document holds only "when, what, and local deltas" — never "how".**
+For any skill in the table, load it with the `Skill` tool; never reproduce its procedure from memory.
+If a skill is unregistered or broken and cannot be loaded, **do not substitute from memory — stop the work and report the breakage to the user** (running on a stale procedure recreates the original problem this document once caused by shadowing skills).
 
-| トリガ | Skill |
+| Trigger | Skill |
 |---|---|
-| plan / spec / todo / issue body / PR body をユーザーに見せる前 | `codex-review` |
-| 実装を Cursor に投げる | `cursor-delegate` |
-| 実装・バグ修正のコードを書く前 | `superpowers:test-driven-development` |
-| バグ・テスト失敗・想定外の挙動（修正案を出す前） | `superpowers:systematic-debugging` |
-| 機能を作る・仕様を決める前 | `superpowers:brainstorming` |
-| **仕様・要件をタスクに分解する / 計画を書く**（着手前） | `superpowers:writing-plans` |
-| 分解済みタスクをこのセッションで回す（実装＋タスクレビュー） | `superpowers:subagent-driven-development` |
-| 書かれた計画を別セッションで実行する（レビュー関門つき） | `superpowers:executing-plans` |
-| 独立したタスクが2件以上あり並列に回せる | `superpowers:dispatching-parallel-agents` |
-| ブランチ単位のレビュー（PR 前） | `superpowers:requesting-code-review` |
-| レビュー指摘を受け取ったとき | `superpowers:receiving-code-review` |
-| 完了 / 修正済み / テスト通過を宣言する前 | `superpowers:verification-before-completion` |
-| ブランチを畳む | `superpowers:finishing-a-development-branch` |
-| GitHub issue / PR の作成・更新 | `github-issues` |
-| ローカル UI/frontend の確認・スクリーンショット | `webapp-testing` |
-| コンテンツを Word 文書へ（貼り付け・docx 更新） | `word-clipboard` |
-| Task 表示が壊れた / Task ツールが見つからない | `task-display-triage` |
-| 変更の影響範囲を知りたい | `gitnexus-impact-analysis` |
-| セッションを畳む・引き継ぐ | `handover` |
+| Before showing a plan / spec / todo / issue body / PR body to the user | `codex-review` |
+| Dispatching implementation to Cursor | `cursor-delegate` |
+| Before writing implementation or bugfix code | `superpowers:test-driven-development` |
+| Bug / test failure / unexpected behavior (before proposing a fix) | `superpowers:systematic-debugging` |
+| Before building a feature or deciding a spec | `superpowers:brainstorming` |
+| **Breaking a spec / requirements into tasks / writing a plan** (before starting) | `superpowers:writing-plans` |
+| Running already-decomposed tasks in this session (implementation + task review) | `superpowers:subagent-driven-development` |
+| Executing a written plan in a separate session (with review gates) | `superpowers:executing-plans` |
+| 2+ independent tasks that can run in parallel | `superpowers:dispatching-parallel-agents` |
+| Branch-level review (before PR) | `superpowers:requesting-code-review` |
+| Receiving code-review feedback | `superpowers:receiving-code-review` |
+| Before declaring done / fixed / tests passing | `superpowers:verification-before-completion` |
+| Wrapping up a branch | `superpowers:finishing-a-development-branch` |
+| Creating or updating GitHub issues / PRs | `github-issues` |
+| Checking local UI/frontend, screenshots | `webapp-testing` |
+| Content bound for a Word document (paste / docx update) | `word-clipboard` |
+| Task display broken / Task tools missing | `task-display-triage` |
+| Assessing the blast radius of a change | `gitnexus-impact-analysis` |
+| Closing out or handing over a session | `handover` |
 
-- **「同じコマンドをずっと打っている」は手順が変わっていない証拠にならない。** 行動の**種類**が変わったら（調査→実装、閲覧→作成、編集→公開）この表を引き直す。ツールが同じでも別種の行動なら別のスキルが要る
-- 機械の外に出るもの（GitHub issue、PR、コメント、公開文書、外部メッセージ）を作る前は、**最初のコマンドを打つ前に**表を確認する。後からではない
-- 例: `gh issue view` / `comment` / `edit` を一日中打っていても `gh issue create` は別種の行動 — `github-issues` を必ずロードする
+- **"I've been typing the same command all along" is NOT evidence the procedure hasn't changed.** When the *kind* of action changes (investigate → implement, view → create, edit → publish), re-consult this table. Same tool, different kind of action → a different skill applies.
+- Before creating anything that leaves the machine (GitHub issue, PR, comment, public document, external message), check the table **before typing the first command** — not after.
+- Example: you can run `gh issue view` / `comment` / `edit` all day, but `gh issue create` is a different kind of action — always load `github-issues`.
 
 ## Core Principles
 
@@ -45,8 +45,8 @@
 ## Workflow Orchestration
 
 ### 1. Plan Node Default
-- 創作的な作業（機能追加・コンポーネント作成・挙動変更）の前に `Skill(superpowers:brainstorming)` — plan mode に入る前に
-- **タスク分解は自分の勘でやらない。`Skill(superpowers:writing-plans)` に従う**（粒度・刻み方・タスク間の契約はすべてスキルが規定している）
+- Before any creative work (adding features, creating components, changing behavior): `Skill(superpowers:brainstorming)` — before entering plan mode
+- **Never decompose tasks by gut feel. Follow `Skill(superpowers:writing-plans)`** (granularity, slicing, and inter-task contracts are all defined by the skill)
 - Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
 - If something goes sideways, STOP and re-plan immediately - don't keep pushing
 - Use plan mode for verification steps, not just building
@@ -61,12 +61,12 @@
 - One tack per subagent for focused execution
 
 ### 3. Plan / Todo Review Loop
-- **トリガ**: implementation plan / spec / todo ドキュメント、および外部に出る文書（issue body / PR body）を、ユーザーに見せる前・作成する前
-- **手順**: `Skill(codex-review)`（文書レビューもスキル側でカバー済み）
-- **ローカル方針**: 作成済みの issue / PR に直しが要るときは **in-place 編集**。create → close → reopen の churn は監査文脈を壊すので避ける
+- **Trigger**: implementation plan / spec / todo documents, and anything published externally (issue body / PR body) — before showing to the user or creating it
+- **Procedure**: `Skill(codex-review)` (document review is covered by the skill)
+- **Local policy**: when an already-created issue / PR needs fixing, **edit in place**. The create → close → reopen churn destroys audit context — avoid it
 
 ### 4. Verification Before Done
-- 完了・修正済み・テスト通過を宣言する前に `Skill(superpowers:verification-before-completion)`
+- Before declaring done / fixed / tests passing: `Skill(superpowers:verification-before-completion)`
 - Never mark a task complete without proving it works
 - Diff behavior between main and your changes when relevant
 - Ask yourself: "Would a staff engineer approve this?"
@@ -81,9 +81,9 @@
 - Challenge your own work before presenting it
 
 ### 6. Autonomous Bug Fixing
-- **修正案を出す前に `Skill(superpowers:systematic-debugging)`。Autonomous とは「ユーザーの手を借りない」であって「手順を飛ばしてよい」ではない** — 原因を特定してから直す
-- その上で: バグ報告・エラー・失敗テスト・落ちた CI を渡されたら、やり方を聞き返さずに直しきる
-- ユーザーのコンテキストスイッチをゼロにする
+- **Before proposing any fix: `Skill(superpowers:systematic-debugging)`. "Autonomous" means "without the user's hands" — NOT "allowed to skip steps"** — identify the cause, then fix
+- On that basis: when handed a bug report, error, failing test, or red CI, fix it end-to-end without asking how
+- Reduce the user's context switching to zero
 
 ### 7. Self-Improvement Loop
 - After ANY correction from the user: update `tasks/lessons.md` with the pattern
@@ -104,7 +104,7 @@
    └─ Write plan → codex review → fix → re-review → zero findings
 
 2. Per task (repeat for each task):
-   ├─ Skill load (mandatory, at task start) — Skill Routing の表を引く
+   ├─ Skill load (mandatory, at task start) — consult the Skill Routing table
    ├─ Implement (Cursor only — mandatory)
    │   ├─ TDD: write test → confirm failure → implement → confirm pass
    │   └─ 1 task = 1 fresh Cursor session (no batching)
@@ -125,34 +125,35 @@
 
 ### Cursor Implementation Rules (Non-Negotiable)
 
-**コマンド・フラグ・モデル id・プロンプト構成・禁止事項の一覧は `Skill(cursor-delegate)`。** 以下はスキルに無いローカル方針だけ。
+**Commands, flags, model ids, prompt structure, and the forbidden list all live in `Skill(cursor-delegate)`.** Below is only local policy the skill does not carry.
 
-- **実装は必ず Cursor 経由**（quota 切れ時は codex CLI へフォールバック、手順はスキル側）— Claude Code のサブエージェントに実装コードを書かせない。Claude Code は計画・レビュー・調査のみ
-- **1 task = 1 fresh session** — 複数タスクを1回の invocation にまとめない
-- **TDD を implementer セッションの外に出さない** — テストと実装を別タスクに割らない。dispatch 前に `Skill(superpowers:test-driven-development)` をロードし、**その本文をプロンプトに埋め込む**（Cursor は Claude Code のスキルを読めないので、名前で参照しただけの制約は届かない）。要約での代用は不可。ロードできないなら dispatch せず復旧する
-- **Split by round: Grok writes it, Composer fixes it** (user directive, 2026-07-25) — 初回実装は Grok、レビュー修正ラウンドは Composer 2.5
-- **レビュー指摘は Claude Code で直さず implementer セッションに差し戻す** — 束縛するルールは「実装した本人が自分の仕事を直す」であって特定の CLI ではない
-- **プロンプトはインラインの heredoc で渡す** — `/tmp/cursor-*.md` に Write して `cat |` で流す形は禁止（遅い）。codex 自動レビューは spec / plan 文書のみが対象で、Cursor プロンプトは対象外
+- **Implementation always goes through Cursor** (on quota exhaustion, fall back to the codex CLI; procedure lives in the skill) — never let a Claude Code subagent write implementation code. Claude Code does planning, review, and investigation only
+- **1 task = 1 fresh session** — never batch multiple tasks into one invocation
+- **Never let TDD leave the implementer session** — do not split tests and implementation into separate tasks. Before dispatch, load `Skill(superpowers:test-driven-development)` (so the orchestrator knows the procedure), then **resolve the absolute path of the TDD SKILL.md and put a mandatory instruction in the prompt: "Read this file first, recite its key points, then start"** (path resolution and the fail-closed guard are in `Skill(cursor-delegate)`; skills are symlink-shared, so Cursor/Codex can read them as files). A name-only reference or a summary is NOT a substitute. If the path cannot be resolved or the file is unreadable, do NOT dispatch — stop and recover
+- **Split by round: Grok writes it, Composer fixes it** (user directive, 2026-07-25) — first implementation goes to Grok; review-fix rounds go to Composer 2.5
+- **Review findings are NOT fixed by Claude Code — send them back to the implementer session.** The binding rule is "whoever implemented it fixes their own work", not any particular CLI
+- **Pass prompts as inline heredocs** — Writing to `/tmp/cursor-*.md` and piping via `cat |` is forbidden (slow). The codex auto-review hook targets spec / plan documents only; Cursor prompts are out of its scope
 
 - **Run impact analysis before dispatch (projects with an impact tool such as GitNexus)** — "impact before editing" cannot be followed literally when the edit is delegated: Cursor does the editing, has no impact tool, and a diff only exists after the fact. Instead, **before dispatching to Cursor**, run impact analysis on the symbols the plan names and record the blast radius in the plan (no code has changed yet, so this genuinely is "before the edit"). HIGH/CRITICAL is a pre-dispatch gate: rethink the approach or get user approval. When you can, embed the blast radius in the Cursor prompt with a concrete instruction not to break the callers' contracts.
   - **Catching symbols the plan did not foresee (mandatory)**: pre-dispatch impact only covers what the plan predicted. After Cursor returns and before committing, reconcile the symbols actually changed against the set you already assessed, and re-run impact on anything unassessed. Never commit unassessed changes. If the spread is wider than expected, or HIGH/CRITICAL appears, fold it back into the plan (re-dispatch) or send the work back.
-  - **A fresh index is a precondition** — impact tools read an index, so stale data gives wrong answers. Re-index before a planning batch. ツールの使い方は `Skill(gitnexus-impact-analysis)` / `Skill(gitnexus-cli)`
+  - **A fresh index is a precondition** — impact tools read an index, so stale data gives wrong answers. Re-index before a planning batch. Tool usage: `Skill(gitnexus-impact-analysis)` / `Skill(gitnexus-cli)`
 
 ### Two-Stage Review (MANDATORY)
 
-手順・テンプレート本文・reviewer に渡す材料はすべてスキル側にある。ここはローカル方針のみ。
+Procedures, template bodies, and the material handed to reviewers all live in the skills. This section is local policy only.
 
-- **Stage 1: Task Review（タスクごとに1回）** — `Agent(task-reviewer)` を dispatch（専用 agent 定義。テンプレは agent 自身が `superpowers:subagent-driven-development` からロードする）。渡すもの: task brief / implementer 報告 / diff package / named risks。タスクをコミットする前に合格が要る。全タスク完了後にまとめてやらない
-- **Stage 2: Branch Review（ブランチごとに1回・PR 前）** — `Agent(branch-reviewer)` を dispatch（テンプレは `superpowers:requesting-code-review` から自動ロード）。渡すもの: BASE_SHA / HEAD_SHA / 何を実装したか（plan 参照）。PR 作成前に合格（Yes / With fixes）が要る
-- **両ステージは別々のサブエージェント** — 統合しない、インラインでやらない、飛ばさない
-- **Reviewer model**: task-reviewer は定義で **sonnet** 固定（最新ミドル層の意。新モデルが出たら定義を読み替える）。branch-reviewer は `inherit` — セッションが最上位モデルで走っていないときだけ、dispatch 時に model で最上位を明示する
-- **UI/frontend を触ったタスクは diff レビューだけでは不十分** — superpowers の reviewer テンプレートはどちらも read-only / diff ベースで、実装者が回したテストをあえて再実行しない。実際に動かさないと出ないバグは原理的に捕まらない。`Skill(webapp-testing)` で実ブラウザに載せて確認してから Quality Review を通す。ロジックのみのタスクは read-only レビューのままでよい
-- **UI/frontend の PR はスクリーンショットを証跡として添付する** — `docs/pr-evidence/pr-<issue>/` にコミットして PR 本文に埋める。diff と unit test では実際に描画されることを証明できない。コミット前に各画像の機微情報を確認: 合成・テストデータのみを使い、実顧客データ・秘密情報・内部 URL は伏せる（画像は git 履歴に永久に残る）
-- **埋め込み画像は絶対 blob URL を使い、実際に描画されることを目視確認する**（user directive, 2026-07-25）— `![x](docs/pr-evidence/...)` のようなリポジトリ相対パスは GitHub で**描画されず**、黙ってリンク切れになる。ファイルはコミット済みなのに証跡が見えない PR が出来上がる。`https://github.com/<owner>/<repo>/blob/<branch>/<path>?raw=true` を使い、**PR ページをブラウザで開いて目で見てから**「証跡を添付した」と報告する。raw URL が 200 を返すことは PR 本文が描画される証明にならない。エントリポイント → 操作 → 結果 → リロード後の永続化まで、レビュアーが手で再現せずに済む粒度で1ステップ1枚を揃える
+- **Stage 1: Task Review (once per task)** — dispatch `Agent(task-reviewer)` (dedicated agent definition; the agent loads its template itself from `superpowers:subagent-driven-development`). Hand it: task brief / implementer report / diff package / named risks. A pass is required before committing the task. Never batch reviews after all tasks are done
+- **Stage 2: Branch Review (once per branch, before PR)** — dispatch `Agent(branch-reviewer)` (template auto-loads from `superpowers:requesting-code-review`). Hand it: BASE_SHA / HEAD_SHA / what was implemented (reference the plan). A pass (Yes / With fixes) is required before creating the PR
+- **The two stages are separate subagents** — never merge them, never do them inline, never skip them
+- **Reviewer model**: task-reviewer is pinned to **sonnet** in its definition (meaning "current mid-tier"; reinterpret when new models ship). branch-reviewer is `inherit` — only when the session is not running on the top-tier model, pass the top-tier model explicitly at dispatch
+- **A diff review alone is NOT sufficient for tasks that touched UI/frontend** — both superpowers reviewer templates are read-only / diff-based and deliberately do not re-run the implementer's tests. Bugs that only appear at runtime are structurally invisible to them. Put the change in a real browser via `Skill(webapp-testing)` and verify before passing Quality Review. Logic-only tasks may keep the read-only review
+- **UI/frontend PRs attach screenshots as evidence** — commit them under `docs/pr-evidence/pr-<issue>/` and embed them in the PR body. A diff plus unit tests cannot prove it actually renders. Before committing, check every image for sensitive content: synthetic/test data only; mask real customer data, secrets, and internal URLs (images live in git history forever)
+- **Embedded images use absolute blob URLs, and you visually confirm they actually render** (user directive, 2026-07-25) — repo-relative paths like `![x](docs/pr-evidence/...)` do **not** render on GitHub; they silently become broken links, producing a PR whose files are committed but whose evidence is invisible. Use `https://github.com/<owner>/<repo>/blob/<branch>/<path>?raw=true`, and **open the PR page in a browser and see it with your own eyes before** reporting "evidence attached". A raw URL returning 200 is not proof the PR body renders. Cover entry point → action → result → persistence after reload, one image per step, at a granularity that spares the reviewer manual reproduction
 
 ### No-Skip Rule
 - **"I'm in a hurry", "user is sleeping", "it's a simple task" are NOT valid reasons to skip any step**
 - If you cannot follow the workflow, tell the user BEFORE starting — never silently skip
+- The only sanctioned lighter path is the **Minor fixes exception** (user directive, 2026-07-06 — see Plan Node Default): it is a pre-declared route with its own gates (announce "implementing directly", TDD, tests + lightweight review), not a skip. Anything outside its criteria takes the full flow
 
 ## Handling Pending Suggestions
 
