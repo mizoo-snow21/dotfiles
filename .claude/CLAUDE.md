@@ -24,6 +24,7 @@ If a skill is unregistered or broken and cannot be loaded, **do not substitute f
 | Content bound for a Word document (paste / docx update) | `word-clipboard` |
 | Task display broken / Task tools missing | `task-display-triage` |
 | Assessing the blast radius of a change | `gitnexus-impact-analysis` |
+| **本番の多数レコードへ一括処理を仕掛ける**（再処理 / バックフィル / 一括再分類） | `bulk-production-ops` |
 | Closing out or handing over a session | `handover` |
 
 - **"I've been typing the same command all along" is NOT evidence the procedure hasn't changed.** When the *kind* of action changes (investigate → implement, view → create, edit → publish), re-consult this table. Same tool, different kind of action → a different skill applies.
