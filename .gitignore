@@ -83,3 +83,5 @@ __pycache__/
 # superpowers-generated working documents (specs/plans/briefs)
 docs/superpowers/
 .superpowers/
+.claude/daemon.lock
+.claude/daemon.status.json

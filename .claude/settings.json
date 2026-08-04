@@ -148,6 +148,5 @@
   "effortLevel": "xhigh",
   "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,
-  "theme": "dark-daltonized",
-  "model": "claude-fable-5[1m]"
+  "theme": "dark-daltonized"
 }
