@@ -155,6 +155,33 @@
       "skillFolderHash": "50b50dd1d65c51835c599745c943ada18b187a86",
       "installedAt": "2026-07-25T09:28:14.170Z",
       "updatedAt": "2026-07-25T10:02:20.625Z"
+    },
+    "azure-ai": {
+      "source": "microsoft/azure-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/microsoft/azure-skills.git",
+      "skillPath": "skills/azure-ai/SKILL.md",
+      "skillFolderHash": "88009b2c4e3acfe43034d75a75b3167c6fa73ffa",
+      "installedAt": "2026-08-04T14:48:56.113Z",
+      "updatedAt": "2026-08-04T14:48:56.113Z"
+    },
+    "azure-document-intelligence": {
+      "source": "microsoftdocs/agent-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/microsoftdocs/agent-skills.git",
+      "skillPath": "skills/azure-document-intelligence/SKILL.md",
+      "skillFolderHash": "69ff59b0683ba7ee2ff81a7bbd079b0074a6b7e9",
+      "installedAt": "2026-08-04T14:49:01.124Z",
+      "updatedAt": "2026-08-04T14:49:01.124Z"
+    },
+    "azure-cognitive-search": {
+      "source": "microsoftdocs/agent-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/microsoftdocs/agent-skills.git",
+      "skillPath": "skills/azure-cognitive-search/SKILL.md",
+      "skillFolderHash": "4a1082975753c78d4a3c0740f0bac5cecdcb62e0",
+      "installedAt": "2026-08-04T14:49:06.089Z",
+      "updatedAt": "2026-08-04T14:49:06.089Z"
     }
   },
   "dismissed": {
