@@ -182,6 +182,24 @@
       "skillFolderHash": "4a1082975753c78d4a3c0740f0bac5cecdcb62e0",
       "installedAt": "2026-08-04T14:49:06.089Z",
       "updatedAt": "2026-08-04T14:49:06.089Z"
+    },
+    "rag-implementation": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/wshobson/agents.git",
+      "skillPath": "plugins/llm-application-dev/skills/rag-implementation/SKILL.md",
+      "skillFolderHash": "ba6185d6dd0ddad7578816ef06f5f1c9dfe49817",
+      "installedAt": "2026-08-04T14:50:43.718Z",
+      "updatedAt": "2026-08-04T14:50:43.718Z"
+    },
+    "evaluate-rag": {
+      "source": "hamelsmu/evals-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/hamelsmu/evals-skills.git",
+      "skillPath": "skills/evaluate-rag/SKILL.md",
+      "skillFolderHash": "59c2326834e1b1fb9d829a47106e657671c3d27d",
+      "installedAt": "2026-08-04T14:50:45.408Z",
+      "updatedAt": "2026-08-04T14:50:45.408Z"
     }
   },
   "dismissed": {
