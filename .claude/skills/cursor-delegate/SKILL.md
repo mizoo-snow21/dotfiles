@@ -85,6 +85,15 @@ If `$TDD_PATH` is empty or unreadable, do NOT dispatch — stop and report the b
 
 `$PONY_PATH` is NOT fail-closed — ponytail governs style, not correctness, so a missing file drops the line and dispatch continues. ponytail is a plugin skill and is not in the synced `~/.agents/skills` pool, so a name invocation (`$ponytail`) does nothing in Cursor; only the read-first path works.
 
+Synced skills work the opposite way — the name invocation is all Cursor needs — but their auto-fire is not something to lean on. The `python-*` set came from an upstream marketplace and its descriptions read as topic labels ("Python code style, linting, formatting") rather than as situations, so none of the five has ever fired. They are reference material, not process, which is why they are pulled deliberately instead of pushed into every prompt:
+
+| Situation | Invoke |
+| --- | --- |
+| Standing up a test suite — fixtures, `conftest.py`, mocking strategy, test layout | `$python-testing-patterns` — pytest mechanics only. It never touches RED-GREEN ordering, so it stacks on top of the TDD skill instead of competing with it |
+| A **measured** slowdown to profile (cProfile, memory) | `$python-performance-optimization` |
+
+`python-code-style`, `python-project-structure`, and `python-design-patterns` stay out of prompts. Linters and task review already surface everything they say, so they cost tokens without adding a constraint the review would have missed.
+
 ```
 ## Task
 [What needs to be done — goal level, no code snippets]
