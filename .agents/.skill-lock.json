@@ -200,6 +200,15 @@
       "skillFolderHash": "59c2326834e1b1fb9d829a47106e657671c3d27d",
       "installedAt": "2026-08-04T14:50:45.408Z",
       "updatedAt": "2026-08-04T14:50:45.408Z"
+    },
+    "prompt-engineering-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/wshobson/agents.git",
+      "skillPath": "plugins/llm-application-dev/skills/prompt-engineering-patterns/SKILL.md",
+      "skillFolderHash": "a68a65a15239b47109528feea5817a52fd7543c2",
+      "installedAt": "2026-08-06T10:41:47.611Z",
+      "updatedAt": "2026-08-06T10:41:47.611Z"
     }
   },
   "dismissed": {
