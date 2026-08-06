@@ -21,7 +21,7 @@ If a skill is unregistered or broken and cannot be loaded, **do not substitute f
 | Wrapping up a branch | `superpowers:finishing-a-development-branch` |
 | Creating or updating GitHub issues / PRs | `github-issues` |
 | Checking local UI/frontend, screenshots | `webapp-testing` |
-| Content bound for a Word document (paste / docx update) | `word-clipboard` |
+| Content bound for a Word document (paste / docx update / Word Online 上の編集) | `word-clipboard` |
 | Task display broken / Task tools missing | `task-display-triage` |
 | Assessing the blast radius of a change | `gitnexus-impact-analysis` |
 | **本番の多数レコードへ一括処理を仕掛ける**（再処理 / バックフィル / 一括再分類） | `bulk-production-ops` |
@@ -171,6 +171,7 @@ At the start of a session, if the working project's CLAUDE.md contains a `<!-- P
 - **Destructive operations (force-push / delete / overwrite) and changes needing user judgment run in the foreground** and are shown before executing.
 - **Browser automation (Claude-in-Chrome): reuse one tab per session.** Navigate within the existing tab instead of opening new ones, and don't call `tabs_context_mcp createIfEmpty` repeatedly. Close tabs you opened with `tabs_close_mcp` when the work is done. **Why:** when the tab group drops mid-session, recreating it spawns a fresh tab and orphans the old one (outside the current group → not API-closable), so orphan "Claude" tabs pile up and clutter the user's browser. Minimize group recreation and clean up as soon as extra tabs appear.
 - **Real-time task display uses the Task tools (TodoWrite is retired).** At the start of any multi-step work, load them with `ToolSearch("select:TaskCreate,TaskUpdate,TaskList")`, create tasks with TaskCreate, and flip status to in_progress / completed as work proceeds so the TUI task list stays live. **A markdown checklist is NOT an acceptable substitute (user directive, 2026-07-23) — never silently degrade to plain-text task lists.** If the Task tools are missing or the display breaks, report it to the user as a blocker and run `Skill(task-display-triage)` — the diagnostic order (kill-switch check, env, version, what needs user approval) lives there.
+- **共有文書（OneDrive/SharePoint のWord等）は、ブラウザ上で直接編集して仕上げるのが既定**（user directive, 2026-08-06）。ローカルにダウンロードして直しファイルごと差し替える経路は、所有者と書き込み権限を確認したうえでの例外。1項目が詰まっても案件ごと別ルートに移さず、項目単位でルートを選び直す（詳細は `Skill(word-clipboard)` の Route C）
 - **Which browser tool: local UI/frontend dev → `Skill(webapp-testing)` (Playwright); real logged-in browser / external sites → Claude in Chrome.** For screenshots, DOM/console inspection, or driving the app under development (localhost / the code in this repo), invoke **`webapp-testing`** — do NOT default to Claude-in-Chrome just because the word "screenshot" was used. Reserve Claude in Chrome for tasks that genuinely need the user's real browser session (authenticated sites, external pages) or when "Chrome" is explicitly requested. The trap: Claude-in-Chrome's MCP tools are always loaded and prominent, so "take a screenshot" drifts to them by default even though webapp-testing is the right tool for dev work.
 
 ## Git Safety

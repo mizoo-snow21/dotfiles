@@ -1,6 +1,6 @@
 ---
 name: word-clipboard
-description: Use when content needs to land in a Microsoft Word document with formatting intact — pasting tables, headings, or Japanese text into an open Word doc via the macOS clipboard, or patching an existing .docx directly. Trigger on Wordに貼り付け, Word文書に反映・更新, クリップボード経由でWordへ, RTF, docx patching, or any deliverable whose final destination is a Word document, even if the user only says "Wordに入れて".
+description: Use when content needs to land in a Microsoft Word document with formatting intact — pasting tables, headings, or Japanese text into an open Word doc via the macOS clipboard, editing a document in Word for the web / Word Online (OneDrive or SharePoint) through the browser, or patching an existing .docx directly. Trigger on Wordに貼り付け, Word文書に反映・更新, Word Online, Word for the web, OneDrive上のdocxを直す, 目次を更新, クリップボード経由でWordへ, RTF, docx patching, or any deliverable whose final destination is a Word document, even if the user only says "Wordに入れて". Also read it before deciding how to deliver a multi-part change to a Word document — it covers choosing a route per item and checking file ownership before committing to a file swap.
 ---
 
 # Word Clipboard / Docx Delivery
@@ -13,8 +13,20 @@ Two verified routes for getting generated content into Microsoft Word on macOS. 
 |---|---|
 | User has the Word doc open / manages it themselves; you hand over a fragment (a chapter, a table) for them to ⌘V | **Route A: clipboard as RTF** |
 | You must update a `.docx` file programmatically (replace a table, renumber cross-references) without the user pasting anything | **Route B: patch the docx** |
+| The document lives in Word for the web (OneDrive/SharePoint) and you are driving the browser yourself | **Route C: edit in Word Online** |
 
-Rule of thumb: interactive handoff → A. File-in, file-out → B.
+Rule of thumb: interactive handoff → A. File-in, file-out → B. You are at the keyboard in the browser → C.
+
+### Pick the route per item, not per job
+
+This is the expensive lesson from 2026-08-06. A job usually contains several independent changes. When one of them turns out to be impossible on the route you started with, the reflex is to move the *whole job* to another route. Resist it — re-check each remaining item separately, because most of them are still doable the easy way.
+
+What happened: four changes were requested (TOC depth, restructure a part, add two chapters, move a chapter). The TOC depth change cannot be saved in Word Online, so everything got rerouted to "patch the docx locally and swap the file." Only after the local work was finished did the file turn out to be owned by someone else and unswappable. Hours went into a local HTTP receiver, blob downloads, a base64 round-trip and a REST API — while three of the four changes could have been done in ten minutes by pasting, a route already proven in the same document days earlier. Going back to it only happened because the user insisted.
+
+Two habits prevent the repeat:
+
+- **Before choosing a route that ends in replacing the file, confirm you can actually replace it.** Owner and write permission is a 30-second check (OneDrive 共有 view shows "◯◯ さんのファイル"; a shared item's context menu has no upload/replace entry). Do it first, not after the work.
+- **When a route dies, re-list the remaining items and ask which ones the original route still handles.** Blocked ≠ blocked for everything.
 
 ## Route A: HTML → RTF → clipboard
 
@@ -96,6 +108,56 @@ Use `python-docx` (`pip install python-docx`; import name is `docx`). Approach v
 4. **Save to a new filename** (`_new.docx`), never overwrite the user's file — they diff and swap themselves.
 5. Verify by reading the saved file back with python-docx: row counts, the replaced text present, the old text absent — and re-scan for the step-0 structures to confirm none were touched.
 
+## Route C: edit in Word Online yourself
+
+Word for the web accepts synthetic clicks, typing and ⌘V, so you can do most editing without involving the user. (Excel Online does not — its grid ignores both CDP events and real OS-level events from `cliclick`. Verified 2026-08-04.) The clipboard payload here is **HTML placed as `«data HTML»`**, not RTF:
+
+```bash
+HEX=$(xxd -p page.html | tr -d '\n')
+osascript -e "set the clipboard to «data HTML${HEX}»"
+```
+
+### Match the destination's formatting explicitly
+
+Word for the web does **not** inherit the surrounding document's look when it pastes HTML — it applies its own paste defaults. Leaving font and spacing unspecified produced three separate rounds of "wrong size" / "wrong line spacing" feedback. Measure the target document and write the values into the HTML.
+
+```bash
+# run/paragraph properties actually in use, straight from the docx
+python3 -c "
+import zipfile,re
+x=zipfile.ZipFile('doc.docx').read('word/document.xml').decode()
+print(re.findall(r'<w:sz w:val=\"(\d+)\"',x)[:5])          # half-points: 21 = 10.5pt
+print(re.findall(r'<w:spacing[^>]*/>',x)[:5])              # before/after in twips (240 = 12pt)
+"
+```
+
+Typical result for a doc assembled this way: body 10.5pt with before/after 240, H1 16pt (style default 280/80), H2 14pt 299/299, H3 12pt 281/281, list items and table cells 0/0. Write those as inline `font-family`/`font-size`/`margin-top`/`margin-bottom`.
+
+Do **not** add `line-height` when the document has no `w:line` setting — specifying it introduces a line-spacing override the surrounding text doesn't have.
+
+### Things that break, and what fixes them
+
+- **A heading pasted at the start of a range loses its outline level and vanishes from the TOC**, even though the styles gallery still says "Heading 1". Re-applying the style does nothing. Fix: select the heading → styles dropdown → **Clear Formatting of Selection** → apply the heading style again → update the TOC.
+- **Pasting at the start of a heading merges the first block into the preceding paragraph** and drops its heading style. Fix: put the cursor at the join → Return → re-apply the heading level (⌘⌥1/2/3). The split often lands one character off, leaving a stray character at the end of the previous paragraph. Repair that with shift+Left → Delete and retype the character at the heading's start; ⌘X → click → ⌘V mis-lands because the click coordinate shifts.
+- **The TOC field's structure cannot be saved.** Changing "Show headings up to", or deleting the TOC, produces "Couldn't save automatically" and drops the session to Viewing every time (4/4 attempts, 2026-08-06, with no other session open). Updating the TOC saves fine. So depth changes need desktop Word or a docx patch of the field switch — `TOC \o "1-3"` → `\o "1-2"` in `word/document.xml`, exactly one occurrence; the many `TOC1`/`TOC2`/`TOC3` hits are paragraph-style references and must not be touched.
+- **Moving a chapter between parts is best done inside Word** (select → ⌘X → navigate → ⌘V). It carries the document's own formatting, so none of the HTML-paste formatting problems apply.
+
+### Getting bytes in and out of the page
+
+When you need the live file locally (or a patched file back into the page) and Graph/download paths are unavailable, the clipboard bridges both directions. The browser window must be frontmost or `navigator.clipboard.readText()` throws `NotAllowedError: Document is not focused`.
+
+```js
+// page → local: fetch the file and park it on the clipboard as base64
+const r = await fetch(downloadUrl, {credentials:'include'});
+const b = new Uint8Array(await r.arrayBuffer());
+let s=''; for (let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));
+await navigator.clipboard.writeText(btoa(s));
+```
+
+`http://localhost` receivers do not work — an HTTPS page is blocked from reaching them by mixed-content rules.
+
+The SharePoint REST API is reachable with the shared session (`/_api/contextinfo` returns a form digest; `GetFileById('<guid>')` returns 200), so a `PUT` to `GetFileById(...)/$value` is the theoretical overwrite path — but expect the harness to refuse to issue it. Treat file replacement as the user's action, and prefer editing in place.
+
 ## Common mistakes
 
 | Mistake | Consequence | Fix |
@@ -107,3 +169,7 @@ Use `python-docx` (`pip install python-docx`; import name is `docx`). Approach v
 | Skipping `trowd` count | Flattened table discovered only after paste | count = rows + header (step 3) |
 | docx: locating table by index | Patch lands on the wrong table next revision | anchor by header text (Route B-1) |
 | docx: renumbering low→high | Cascading replacements corrupt every number | high→low (Route B-3) |
+| Rerouting the whole job because one item is blocked | Days of detour for work that was already possible | re-list the remaining items per route ("Pick the route per item") |
+| Building a file swap before checking who owns the file | Finished work that cannot be delivered | confirm owner + write permission first |
+| Word Online: pasting HTML with no font/spacing declared | Pasted block visibly differs from surrounding text | measure the docx and inline the values (Route C) |
+| Word Online: reporting a paste as done without looking | The heading-merge and outline-level failures are invisible from the tool result | screenshot after every paste; check the TOC picks the heading up |
