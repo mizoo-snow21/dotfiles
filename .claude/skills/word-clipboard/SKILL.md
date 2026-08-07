@@ -133,6 +133,10 @@ print(re.findall(r'<w:spacing[^>]*/>',x)[:5])              # before/after in twi
 
 Typical result for a doc assembled this way: body 10.5pt with before/after 240, H1 16pt (style default 280/80), H2 14pt 299/299, H3 12pt 281/281, list items and table cells 0/0. Write those as inline `font-family`/`font-size`/`margin-top`/`margin-bottom`.
 
+**Measure the range you are replacing, not the whole file.** Aggregating `w:spacing` across a 46-page manual reported body paragraphs as 0/0, because other parts of the document carry hundreds of genuinely 0/0 paragraphs. The section actually being replaced used 240/240, so the paste came out visibly tighter than its neighbours. Walk `body` and print style + spacing + text for the element range you are about to overwrite, then read the values off *those* lines.
+
+Also decide spacing per *kind* of paragraph rather than applying one value to everything. A run of `**label** value` lines is a definition block and reads as one unit at 0/0, while the prose paragraphs around it need the document's 240/240 — the gap above and below each block then comes from the neighbouring heading's own margin.
+
 Do **not** add `line-height` when the document has no `w:line` setting — specifying it introduces a line-spacing override the surrounding text doesn't have.
 
 ### Things that break, and what fixes them
@@ -140,7 +144,14 @@ Do **not** add `line-height` when the document has no `w:line` setting — speci
 - **A heading pasted at the start of a range loses its outline level and vanishes from the TOC**, even though the styles gallery still says "Heading 1". Re-applying the style does nothing. Fix: select the heading → styles dropdown → **Clear Formatting of Selection** → apply the heading style again → update the TOC.
 - **Pasting at the start of a heading merges the first block into the preceding paragraph** and drops its heading style. Fix: put the cursor at the join → Return → re-apply the heading level (⌘⌥1/2/3). The split often lands one character off, leaving a stray character at the end of the previous paragraph. Repair that with shift+Left → Delete and retype the character at the heading's start; ⌘X → click → ⌘V mis-lands because the click coordinate shifts.
 - **The TOC field's structure cannot be saved.** Changing "Show headings up to", or deleting the TOC, produces "Couldn't save automatically" and drops the session to Viewing every time (4/4 attempts, 2026-08-06, with no other session open). Updating the TOC saves fine. So depth changes need desktop Word or a docx patch of the field switch — `TOC \o "1-3"` → `\o "1-2"` in `word/document.xml`, exactly one occurrence; the many `TOC1`/`TOC2`/`TOC3` hits are paragraph-style references and must not be touched.
+- **Updating the TOC while the document is still paginating writes `2` as every page number.** Confirmed 2026-08-07: the entry text updates correctly, but every number collapses to 2 and reloading does not repair it — the wrong numbers are now stored in the field. The page counter in the status bar is the tell; it drifts (26 → 46 → 26) while Word lays the document out. Reload, watch the counter until it stops moving, *then* update — the second update wrote 1/2/3/4/5/5/7/8… correctly. So: never update the TOC as the last action after a large paste; give the layout time first.
 - **Moving a chapter between parts is best done inside Word** (select → ⌘X → navigate → ⌘V). It carries the document's own formatting, so none of the HTML-paste formatting problems apply.
+
+### Replacing a whole section without disturbing its heading
+
+Leave the section's own heading out of both the selection and the payload — start the range at the first *body* paragraph and let the existing heading stand. Click at its start, `Home`, scroll, then shift+click at the end of the last cell of the closing table; the status bar's "N of M words" confirms a range was taken, and scrolling back to zoom on the heading confirms it stayed unselected (white, not grey). Scroll in a call *after* the one that set the caret — Word scrolls back to the caret at the end of a batch and silently undoes a scroll issued in the same one.
+
+Even so, the first pasted block merges into that preceding heading (the failure above). The repair that worked: click just left of the merged text, `shift+Right` and zoom to see which character got selected, walk over with `Right`/`shift+Right` until the selection is the single character before the join — a **space Word inserts at the seam** — `Delete` it, press `Return`, then set the new second paragraph back to Normal from the styles dropdown, since splitting a Heading 1 leaves both halves Heading 1. Once the body paragraph exists as its own paragraph, re-pasting over the same range does *not* merge again, so an iteration on formatting costs nothing extra.
 
 ### Getting bytes in and out of the page
 

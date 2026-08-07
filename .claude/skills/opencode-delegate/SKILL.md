@@ -1,6 +1,6 @@
 ---
 name: opencode-delegate
-description: Delegate implementation tasks to the opencode CLI (OpenCode Go models — grok-4.5, kimi-k3, glm-5.2 …) in headless mode. Use when the user says "opencode", "opencode go", "opencodeで実装", "opencodeに投げて", "opencodeに実装させて", or wants an implementer other than Cursor/Codex. Read this before writing any `opencode run` command — the headless permission trap and the skill-visibility differences are here.
+description: Delegate implementation tasks and document reviews to the opencode CLI in headless mode — default model `opencode-go/kimi-k3`. Use when the user says "opencode", "opencode go", "opencodeで実装", "opencodeに投げて", "opencodeに実装させて", or wants an implementer or reviewer other than Cursor/Codex — including when codex is out of quota and a review still has to happen. Read this before writing any `opencode run` command — the headless permission trap, the model roster, and the skill-visibility differences are here.
 ---
 
 # opencode Delegate
@@ -13,6 +13,10 @@ load that skill for the shared workflow rather than duplicating it here, so the 
 never drift apart.
 
 Everything below was verified against opencode **1.18.14** on 2026-08-07.
+
+**Default model: `opencode-go/kimi-k3`** — for implementation, fix rounds, and document
+review alike (user directive, 2026-08-07). One model everywhere means one set of quirks to
+learn instead of four; deviate only for a reason you can name.
 
 ## What opencode already knows
 
@@ -65,18 +69,25 @@ points at. Widen it only for a path the task genuinely needs; a permanent versio
 # Fail-closed: no TDD skill, no dispatch (per CLAUDE.md). No fallback, no summary.
 TDD=$(ls -d ~/.claude/plugins/cache/superpowers-marketplace/superpowers/*/skills/test-driven-development/SKILL.md 2>/dev/null | sort -V | tail -1)
 test -r "$TDD" || { echo "STOP: TDD skill not found — do not dispatch" >&2; exit 1; }
-python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$TDD"   # paste this path into the prompt
+
+# Best-effort: ponytail governs implementation style, not correctness, so a missing file
+# drops the line and dispatch continues.
+PONY=$(ls -d ~/.claude/plugins/cache/ponytail/ponytail/*/skills/ponytail/SKILL.md 2>/dev/null | sort -V | tail -1)
+
+# Resolve both to real paths — paste them into the prompt literally.
+python3 -c 'import os,sys;[print(os.path.realpath(p)) for p in sys.argv[1:] if p]' "$TDD" "$PONY"
 
 TITLE="t3-fix-add-$(date +%H%M)"   # unique — this is how you find the session later
 
 opencode run --dir "<project-dir>" \
-  -m opencode-go/grok-4.5 \
+  -m opencode-go/kimi-k3 \
   --agent build \
   --title "$TITLE" \
   "$(cat <<'EOF'
 最初に <resolved TDD SKILL.md path> を読み、その RED-GREEN-REFACTOR に厳密に従うこと。
 failing test を確認する前に実装コードを書かない。読了後、手順の要点を3行で復唱してから
 着手すること。完了時に変更ファイル一覧を報告すること。
+実装方針は <resolved ponytail SKILL.md path> にも従うこと（最小の変更で動くものを書く）。
 
 ## Task / Background / Target files / Test requirements / Forbidden
 ...（cursor-delegate の prompt テンプレートと同じ）
@@ -85,7 +96,15 @@ EOF
 ```
 
 - **Quoted heredoc** (`'EOF'`) so `$`, backticks and quotes in pasted constraints survive.
-  It also means `$TDD` will *not* expand — write the resolved absolute path in literally.
+  It also means `$TDD` / `$PONY` will *not* expand — write the resolved absolute paths in
+  literally.
+- **TDD is fail-closed, ponytail is not.** TDD decides whether the code is *correct*, so a
+  missing skill file stops the dispatch. ponytail decides whether it is *lean*, and shipping
+  slightly over-built code beats blocking on a style reference — drop the line and continue.
+- Both are plugin skills under `~/.claude/plugins/`, which opencode cannot see, so neither
+  responds to a name invocation. Only the absolute path works, and reading it needs the
+  `external_directory` permission below. This is the opposite of `~/.claude/skills/*`, which
+  opencode registers as real skills you can name.
 - `< /dev/null` on every invocation, so a backgrounded run can never block on stdin.
 - `--agent build` is the implementer (permission `*: allow`). `--agent plan` is read-only —
   useful for a look-before-you-leap pass. `opencode agent list` shows the rest.
@@ -93,17 +112,47 @@ EOF
 
 ## Models
 
-`opencode models` is the source of truth; `opencode providers list` shows which credential
-is active (here: **OpenCode Go** → the `opencode-go/*` half of the list).
+`opencode models` lists what the **active credential** exposes, not the full catalog
+(`opencode auth list` shows which: here a single **OpenCode Go** entry → the `opencode-go/*`
+half). Use `opencode-go/kimi-k3` unless something below applies.
 
-- Default first implementation: `opencode-go/grok-4.5` — it completed a full RED→GREEN TDD
-  round in ~22s on the smoke test.
+Roster verified 2026-08-07 by sending a trivial prompt to all 18 `opencode-go` models —
+17 answered. Working: `kimi-k3`, `kimi-k2.7-code`, `kimi-k2.6`, `grok-4.5`, `gpt-5.6-luna`,
+`glm-5.2`, `glm-5.1`, `qwen3.8-max`, `qwen3.7-max`, `qwen3.7-plus`, `qwen3.6-plus`,
+`deepseek-v4-pro`, `minimax-m3`, `minimax-m2.7`, `mimo-v2.5-pro`, `mimo-v2.5`, `hy3`.
+
+- **`deepseek-v4-flash` is the one failure** — "only available hosted in China and requires…".
+  A region opt-in, not a broken credential; the others in that family answer fine.
+- **Disabling models on the OpenCode dashboard does not reach the CLI.** After the user turned
+  several off, all 18 still appeared in `opencode models` and all still answered. Probe, don't
+  infer from the web UI.
 - `--variant high` / `max` raises reasoning effort where the provider supports it. Spend it
   on multi-step refactors, not as a general "be careful" knob.
-- Some `opencode-go` models are China-hosted and error out until opted in on the workspace
-  page (`deepseek-v4-flash` did). Fail fast, but wasted round-trip — prefer a model you have
-  already run.
 - `opencode/*-free` models exist for throwaway experiments, not for work you intend to keep.
+
+### `gpt-5.6-sol` is reachable, just not on this plan
+
+The catalog cache (`~/.cache/opencode/models.json`) carries `gpt-5.6-sol` under the `openai`,
+`github-copilot` and `openrouter` providers — but **not** under `opencode-go`, so
+`--model opencode-go/gpt-5.6-sol` returns a 500. Adding an OpenAI / Copilot / OpenRouter
+credential with `opencode auth login` would make `--model openai/gpt-5.6-sol` work. Until then
+sol lives only in the codex CLI, and when codex hits its usage limit the review still has to
+run — that is what the kimi-k3 default is for.
+
+## Document review
+
+The same dispatch works for reviewing a document (a plan, a spec, a manual chapter) when
+`codex-review`'s sol is unavailable. Two differences from an implementation dispatch:
+
+- `--agent plan` instead of `build` — the reviewer has no business editing files, and read-only
+  removes the whole class of "the reviewer helpfully fixed it" surprises.
+- Put the file **path** in the prompt and let the agent read it, rather than pasting the
+  contents. A 3,000-line paste crowds out the reasoning you are paying for.
+
+Give it the original requirements alongside the draft; without them a reviewer cannot tell a
+deliberate omission from a dropped requirement. Running two different models over the same
+document is cheap and their findings overlap only partly — worth it when the document is
+going somewhere you cannot easily take it back from.
 
 ## Sessions
 
@@ -116,7 +165,7 @@ opencode session list | grep "$TITLE"       # id + title + updated
 
 ```bash
 # Fix round — same session, explicit model each time (resuming does not restore it)
-opencode run --dir "<project-dir>" -s "$SID" -m opencode-go/grok-4.5 "$(cat <<'EOF'
+opencode run --dir "<project-dir>" -s "$SID" -m opencode-go/kimi-k3 "$(cat <<'EOF'
 ...review findings to fix, referencing the original task...
 EOF
 )" < /dev/null
