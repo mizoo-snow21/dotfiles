@@ -1,5 +1,6 @@
 brew "gh"
 brew "mise"
+brew "rtk"
 brew "yarn"
 brew "zsh-autosuggestions"
 brew "zsh-completions"

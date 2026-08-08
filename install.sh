@@ -107,6 +107,24 @@ else
 fi
 
 # ==============================================================================
+# rtk Setup (LLM token compression proxy)
+# ==============================================================================
+
+echo ""
+if command -v rtk &> /dev/null; then
+    echo "🪚 Setting up rtk..."
+    RTK_CONFIG_DIR="$HOME/Library/Application Support/rtk"
+    mkdir -p "$RTK_CONFIG_DIR"
+    backup_and_link "$DOTFILES_DIR/.config/rtk/config.toml" "$RTK_CONFIG_DIR/config.toml"
+    rtk init -g --hook-only --auto-patch                 # Claude Code (RTK.md is tracked in .claude/)
+    rtk init -g --agent cursor --hook-only --auto-patch  # Cursor CLI
+    rtk init -g --opencode --hook-only --auto-patch      # OpenCode
+    echo "✅ rtk hooks installed"
+else
+    echo "⚠️  rtk not found. Skipping rtk setup."
+fi
+
+# ==============================================================================
 # Git Configuration
 # ==============================================================================
 

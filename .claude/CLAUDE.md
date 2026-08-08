@@ -104,7 +104,8 @@ If a skill is unregistered or broken and cannot be loaded, **do not substitute f
 1. Plan (Claude)
    └─ Write plan → codex review → fix → re-review → zero findings
 
-2. Per task (repeat for each task):
+2. Per task (independent tasks run in parallel — see Parallel Implementation Rule):
+   ├─ Fan-out decision — `superpowers:dispatching-parallel-agents`
    ├─ Skill load (mandatory, at task start) — consult the Skill Routing table
    ├─ Implement (Cursor only — mandatory)
    │   ├─ TDD: write test → confirm failure → implement → confirm pass
@@ -130,6 +131,12 @@ If a skill is unregistered or broken and cannot be loaded, **do not substitute f
 
 - **Implementation always goes through Cursor** (on quota exhaustion, fall back to the codex CLI; procedure lives in the skill) — never let a Claude Code subagent write implementation code. Claude Code does planning, review, and investigation only
 - **1 task = 1 fresh session** — never batch multiple tasks into one invocation
+- **Parallel Implementation Rule — independent tasks run in parallel, dependent ones stay ordered** (user directive, 2026-08-08). `superpowers:subagent-driven-development` lists "dispatch multiple implementation subagents in parallel" as a Red Flag, but its stated reason is conflicts — so **this local rule overrides it only where conflict is structurally impossible**. Dispatch in parallel only when ALL of the following hold:
+  1. **Disjoint file sets** — declared per task in the plan, and the pre-dispatch impact analysis blast radii do not overlap either
+  2. **No ordering dependency and no shared-contract change** — tasks touching proto / migrations / shared env / shared entities always run serially
+  3. **1 task = 1 worktree** (`superpowers:using-git-worktrees`) — one working tree means one HEAD, so committing task A moves the BASE..HEAD range task B's review is scoped to, and any `git add -A` sweeps another session's half-written files
+  4. **Each worktree gets its own test-environment namespace** — container project name, host ports, database. A separate directory does NOT separate fixed ports; two `make e2e` runs collide regardless of how disjoint the source files are
+  Miss any one of them and it runs serially. Even in parallel, Task Review is one dispatch per task (never batched), and announce how many sessions were dispatched at launch
 - **Never let TDD leave the implementer session** — do not split tests and implementation into separate tasks. Before dispatch, load `Skill(superpowers:test-driven-development)` (so the orchestrator knows the procedure), then **resolve the absolute path of the TDD SKILL.md and put a mandatory instruction in the prompt: "Read this file first, recite its key points, then start"** (path resolution and the fail-closed guard are in `Skill(cursor-delegate)`; skills are symlink-shared, so Cursor/Codex can read them as files). A name-only reference or a summary is NOT a substitute. If the path cannot be resolved or the file is unreadable, do NOT dispatch — stop and recover
 - **Split by round: Grok writes it, Composer fixes it** (user directive, 2026-07-25) — first implementation goes to Grok; review-fix rounds go to Composer 2.5
 - **Review findings are NOT fixed by Claude Code — send them back to the implementer session.** The binding rule is "whoever implemented it fixes their own work", not any particular CLI
@@ -167,7 +174,7 @@ At the start of a session, if the working project's CLAUDE.md contains a `<!-- P
 ## Execution / Visibility
 
 - **No *silent* background work** (not no background): you may launch subagents and Cursor in the background and in parallel, but at launch announce what you dispatched and how many, then report each result's key points as its task-notification arrives. Never fire-and-forget, and never block silently for minutes with no output.
-- **Cursor delegation is the default implementation path** (see SDD). Independent tasks may run as multiple Cursor sessions in parallel (1 task = 1 fresh session; keep dependent tasks ordered). If the harness auto-backgrounds a long run, that's fine as long as you wait for completion and report the result.
+- **Cursor delegation is the default implementation path** (see SDD). Independent tasks may run as multiple Cursor sessions in parallel (conditions in the SDD Parallel Implementation Rule: disjoint files, no shared contracts, 1 task = 1 worktree, separate test-environment namespace). If the harness auto-backgrounds a long run, that's fine as long as you wait for completion and report the result.
 - **Destructive operations (force-push / delete / overwrite) and changes needing user judgment run in the foreground** and are shown before executing.
 - **Browser automation (Claude-in-Chrome): reuse one tab per session.** Navigate within the existing tab instead of opening new ones, and don't call `tabs_context_mcp createIfEmpty` repeatedly. Close tabs you opened with `tabs_close_mcp` when the work is done. **Why:** when the tab group drops mid-session, recreating it spawns a fresh tab and orphans the old one (outside the current group → not API-closable), so orphan "Claude" tabs pile up and clutter the user's browser. Minimize group recreation and clean up as soon as extra tabs appear.
 - **Real-time task display uses the Task tools (TodoWrite is retired).** At the start of any multi-step work, load them with `ToolSearch("select:TaskCreate,TaskUpdate,TaskList")`, create tasks with TaskCreate, and flip status to in_progress / completed as work proceeds so the TUI task list stays live. **A markdown checklist is NOT an acceptable substitute (user directive, 2026-07-23) — never silently degrade to plain-text task lists.** If the Task tools are missing or the display breaks, report it to the user as a blocker and run `Skill(task-display-triage)` — the diagnostic order (kill-switch check, env, version, what needs user approval) lives there.
@@ -183,3 +190,5 @@ At the start of a session, if the working project's CLAUDE.md contains a `<!-- P
 
 - Never guess secret names or scan/enumerate multiple secrets (reads as credential-scanning and gets denied). Derive the canonical secret ID and field name from the project's own config first — `rg -n "SECRET_NAME|secretName" scripts/ infrastructure/` or the CDK/Terraform constructs — then fetch that single entry.
 - Never print a secret value; validate format by regex only. Write it to the target (`.env.local` etc.) without echoing.
+
+@RTK.md
