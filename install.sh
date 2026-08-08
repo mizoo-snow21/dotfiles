@@ -120,6 +120,12 @@ if command -v rtk &> /dev/null; then
     rtk init -g --agent cursor --hook-only --auto-patch  # Cursor CLI
     rtk init -g --opencode --hook-only --auto-patch      # OpenCode
     rtk init -g --codex --auto-patch                     # Codex CLI (instructions-only, no hook)
+    # Codex CLI does not expand @-imports in AGENTS.md (verified 2026-08-08), so the
+    # reference rtk writes is dead — inline the instructions plus the review carve-out.
+    if ! grep -q "Rust Token Killer" "$HOME/.codex/AGENTS.md" 2>/dev/null; then
+        cat "$HOME/.codex/RTK.md" >> "$HOME/.codex/AGENTS.md"
+        cat "$DOTFILES_DIR/.config/rtk/codex-agents-exception.md" >> "$HOME/.codex/AGENTS.md"
+    fi
     echo "✅ rtk hooks installed"
 else
     echo "⚠️  rtk not found. Skipping rtk setup."
