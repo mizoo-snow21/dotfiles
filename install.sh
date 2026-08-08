@@ -117,7 +117,9 @@ if command -v rtk &> /dev/null; then
     mkdir -p "$RTK_CONFIG_DIR"
     backup_and_link "$DOTFILES_DIR/.config/rtk/config.toml" "$RTK_CONFIG_DIR/config.toml"
     rtk init -g --hook-only --auto-patch                 # Claude Code (RTK.md is tracked in .claude/)
-    rtk init -g --agent cursor --hook-only --auto-patch  # Cursor CLI
+    # Cursor is deliberately NOT hooked: its approval model evaluates the allowlist
+    # against the POST-hook command, so rewriting `ls` to `rtk ls` stops it matching
+    # `Shell(ls)` and headless runs reject it. Verified 2026-08-08.
     rtk init -g --opencode --hook-only --auto-patch      # OpenCode
     rtk init -g --codex --auto-patch                     # Codex CLI (instructions-only, no hook)
     # Codex CLI does not expand @-imports in AGENTS.md (verified 2026-08-08), so the
