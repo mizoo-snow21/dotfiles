@@ -119,6 +119,7 @@ if command -v rtk &> /dev/null; then
     rtk init -g --hook-only --auto-patch                 # Claude Code (RTK.md is tracked in .claude/)
     rtk init -g --agent cursor --hook-only --auto-patch  # Cursor CLI
     rtk init -g --opencode --hook-only --auto-patch      # OpenCode
+    rtk init -g --codex --auto-patch                     # Codex CLI (instructions-only, no hook)
     echo "✅ rtk hooks installed"
 else
     echo "⚠️  rtk not found. Skipping rtk setup."
