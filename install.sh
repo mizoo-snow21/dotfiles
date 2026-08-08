@@ -117,7 +117,10 @@ if command -v rtk &> /dev/null; then
     mkdir -p "$RTK_CONFIG_DIR"
     backup_and_link "$DOTFILES_DIR/.config/rtk/config.toml" "$RTK_CONFIG_DIR/config.toml"
     rtk init -g --hook-only --auto-patch                 # Claude Code (RTK.md is tracked in .claude/)
-    rtk init -g --agent cursor --hook-only --auto-patch   # Cursor CLI
+    # Cursor hook is NOT registered here. On this machine the hook fires without any
+    # local registration (verified: hooks.json deleted, rtk hook-audit still counts
+    # invocations), so adding one would only duplicate it. The allowlist entry below
+    # is what actually makes Cursor work, and it is harmless when no hook fires.
     # Cursor evaluates its approval allowlist against the POST-hook command, so every
     # rewritten command needs `Shell(rtk)` allowlisted or headless dispatches reject
     # them all. Cursor's factory default allowlist is just ["Shell(ls)"].
