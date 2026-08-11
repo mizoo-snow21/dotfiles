@@ -85,3 +85,4 @@ docs/superpowers/
 .superpowers/
 .claude/daemon.lock
 .claude/daemon.status.json
+.claude/daemon-*
