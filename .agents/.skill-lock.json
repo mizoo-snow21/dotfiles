@@ -209,6 +209,15 @@
       "skillFolderHash": "a68a65a15239b47109528feea5817a52fd7543c2",
       "installedAt": "2026-08-06T10:41:47.611Z",
       "updatedAt": "2026-08-06T10:41:47.611Z"
+    },
+    "gsap-web": {
+      "source": "iart-ai/web-animation-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/iart-ai/web-animation-skills.git",
+      "skillPath": "skills/gsap-web/SKILL.md",
+      "skillFolderHash": "3bcb811a4824de2ce29ab57b6d295e14107cf00d",
+      "installedAt": "2026-08-11T12:54:31.753Z",
+      "updatedAt": "2026-08-11T12:54:31.753Z"
     }
   },
   "dismissed": {
