@@ -217,7 +217,79 @@
       "skillPath": "skills/gsap-web/SKILL.md",
       "skillFolderHash": "3bcb811a4824de2ce29ab57b6d295e14107cf00d",
       "installedAt": "2026-08-11T12:54:31.753Z",
-      "updatedAt": "2026-08-11T12:54:31.753Z"
+      "updatedAt": "2026-08-11T12:58:52.169Z"
+    },
+    "60fps-animation": {
+      "source": "iart-ai/web-animation-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/iart-ai/web-animation-skills.git",
+      "skillPath": "skills/60fps-animation/SKILL.md",
+      "skillFolderHash": "dea082de40b9ab5f61dcc74c6e2c5da90ad3ed7e",
+      "installedAt": "2026-08-11T12:58:52.164Z",
+      "updatedAt": "2026-08-11T12:59:03.712Z"
+    },
+    "accessible-animation": {
+      "source": "iart-ai/web-animation-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/iart-ai/web-animation-skills.git",
+      "skillPath": "skills/accessible-animation/SKILL.md",
+      "skillFolderHash": "16090637c92eff0ea9c92d86156c908f4e867ad7",
+      "installedAt": "2026-08-11T12:58:52.166Z",
+      "updatedAt": "2026-08-11T12:59:05.587Z"
+    },
+    "ascii-animation": {
+      "source": "iart-ai/web-animation-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/iart-ai/web-animation-skills.git",
+      "skillPath": "skills/ascii-animation/SKILL.md",
+      "skillFolderHash": "86af92ccd629d8954a188ccf4e4c257f2e6568b7",
+      "installedAt": "2026-08-11T12:58:52.168Z",
+      "updatedAt": "2026-08-11T12:59:07.470Z"
+    },
+    "glassmorphism": {
+      "source": "iart-ai/web-animation-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/iart-ai/web-animation-skills.git",
+      "skillPath": "skills/glassmorphism/SKILL.md",
+      "skillFolderHash": "ce4e50bbd08df9bfa7e635105a93be6768a0c7d5",
+      "installedAt": "2026-08-11T12:58:52.168Z",
+      "updatedAt": "2026-08-11T12:59:09.592Z"
+    },
+    "lottie-animation": {
+      "source": "iart-ai/web-animation-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/iart-ai/web-animation-skills.git",
+      "skillPath": "skills/lottie-animation/SKILL.md",
+      "skillFolderHash": "cd57af94765ff44847071b7b2ee82d8bba1d10ae",
+      "installedAt": "2026-08-11T12:58:52.169Z",
+      "updatedAt": "2026-08-11T12:59:12.392Z"
+    },
+    "micro-interaction": {
+      "source": "iart-ai/web-animation-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/iart-ai/web-animation-skills.git",
+      "skillPath": "skills/micro-interaction/SKILL.md",
+      "skillFolderHash": "b98ce80d2bca5e1f636ee5b97ceed6e796bbe23e",
+      "installedAt": "2026-08-11T12:58:52.169Z",
+      "updatedAt": "2026-08-11T12:59:15.447Z"
+    },
+    "page-transition-animation": {
+      "source": "iart-ai/web-animation-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/iart-ai/web-animation-skills.git",
+      "skillPath": "skills/page-transition-animation/SKILL.md",
+      "skillFolderHash": "67c590b38acc232b525030558dab1976b4c92153",
+      "installedAt": "2026-08-11T12:58:52.170Z",
+      "updatedAt": "2026-08-11T12:59:17.167Z"
+    },
+    "svg-animation": {
+      "source": "iart-ai/web-animation-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/iart-ai/web-animation-skills.git",
+      "skillPath": "skills/svg-animation/SKILL.md",
+      "skillFolderHash": "742f1966bc0acc342a800c78910154b036bd8e64",
+      "installedAt": "2026-08-11T12:58:52.170Z",
+      "updatedAt": "2026-08-11T12:59:18.953Z"
     }
   },
   "dismissed": {
