@@ -88,7 +88,11 @@ backup_and_link "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
 backup_and_link "$DOTFILES_DIR/.config/mise" "$HOME/.config/mise"
 backup_and_link "$DOTFILES_DIR/.config/ghostty" "$HOME/.config/ghostty"
 backup_and_link "$DOTFILES_DIR/.config/zellij" "$HOME/.config/zellij"
-backup_and_link "$DOTFILES_DIR/.cursor" "$HOME/.cursor"
+# .cursor はディレクトリ全体をリンクしない。chats/ projects/ agents/ plans/ など
+# Cursor の実行時状態が同居しており、backup_and_link の rm -rf で消えるため。
+# リポジトリで持つ意味があるサブディレクトリだけを個別にリンクする。
+backup_and_link "$DOTFILES_DIR/.cursor/commands" "$HOME/.cursor/commands"
+backup_and_link "$DOTFILES_DIR/.cursor/rules" "$HOME/.cursor/rules"
 backup_and_link "$DOTFILES_DIR/.claude" "$HOME/.claude"
 
 echo "✅ Dotfiles installation completed!"
