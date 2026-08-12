@@ -37,6 +37,13 @@ else
     claude mcp add -s user gitnexus -- npx -y gitnexus mcp
 fi
 
+if claude mcp get flint-chart &> /dev/null; then
+    echo "✅ Already registered: flint-chart"
+else
+    echo "📦 Registering: flint-chart"
+    claude mcp add -s user flint-chart -- npx -y flint-chart-mcp
+fi
+
 echo ""
 echo "🔎 Current Claude Code MCP servers:"
 claude mcp list
