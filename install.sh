@@ -153,27 +153,6 @@ else
 fi
 
 # ==============================================================================
-# Headroom Setup (OSS CLI: token compression proxy)
-# ==============================================================================
-
-echo ""
-HEADROOM_BIN="$HOME/.local/share/mise/shims/headroom"
-if [[ -x "$HEADROOM_BIN" ]]; then
-    echo "🧠 Setting up Headroom..."
-    # 常駐プロキシ（launchd, :8787）を立て、検出したツールを配線する。
-    # ANTHROPIC_BASE_URL / OPENAI_BASE_URL はプロキシ前提なので、常駐させる
-    # ところまでが1セット。落ちていると Claude Code / Codex が繋がらない。
-    "$HEADROOM_BIN" deploy --no-docker
-    # クライアント側の恒久設定。~/.claude/settings.json のフックには
-    # headroom の絶対パスが書かれるため、マシンごとに init を流し直す。
-    "$HEADROOM_BIN" init -g claude
-    "$HEADROOM_BIN" init -g codex
-    echo "✅ Headroom configured"
-else
-    echo "⚠️  headroom not found (mise の pipx:headroom-ai). Skipping Headroom setup."
-fi
-
-# ==============================================================================
 # Git Configuration
 # ==============================================================================
 

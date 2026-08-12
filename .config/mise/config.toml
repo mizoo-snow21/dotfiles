@@ -2,7 +2,6 @@
 aws-cli = "latest"
 azure-cli = "latest"
 gcloud = "latest"
-"pipx:headroom-ai" = { version = "latest", extras = "all" }
 go = "latest"
 node = "latest"
 "npm:@openai/codex" = "latest"
