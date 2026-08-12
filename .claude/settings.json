@@ -2,7 +2,9 @@
   "env": {
     "CLAUDE_CODE_MONITOR_GHOSTTY_ASKED": "1",
     "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1",
-    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5"
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5",
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787",
+    "ENABLE_TOOL_SEARCH": "true"
   },
   "permissions": {
     "allow": [
@@ -113,6 +115,28 @@
             "command": "rtk hook claude"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/mizoo/.local/share/mise/installs/pipx-headroom-ai/latest/bin/headroom init hook ensure --profile init-user --marker headroom-init-claude",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/mizoo/.local/share/mise/installs/pipx-headroom-ai/latest/bin/headroom init hook ensure --profile init-user --marker headroom-init-claude",
+            "timeout": 15
+          }
+        ]
       }
     ]
   },
@@ -126,7 +150,8 @@
     "claude-mem@thedotmack": true,
     "ralph-loop@claude-plugins-official": true,
     "superpowers@superpowers-marketplace": true,
-    "slack@claude-plugins-official": false
+    "slack@claude-plugins-official": false,
+    "headroom@headroom-marketplace": true
   },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
@@ -151,6 +176,12 @@
       "source": {
         "source": "github",
         "repo": "thedotmack/claude-mem"
+      }
+    },
+    "headroom-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "chopratejas/headroom"
       }
     }
   },
