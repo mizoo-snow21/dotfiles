@@ -2,7 +2,8 @@
   "env": {
     "CLAUDE_CODE_MONITOR_GHOSTTY_ASKED": "1",
     "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1",
-    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5"
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5",
+    "ENABLE_TOOL_SEARCH": "true"
   },
   "permissions": {
     "allow": [
