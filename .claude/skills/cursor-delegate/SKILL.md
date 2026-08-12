@@ -1,6 +1,6 @@
 ---
 name: cursor-delegate
-description: Delegate implementation tasks to Cursor CLI (Grok 4.5) in headless mode. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
+description: Delegate implementation tasks to Cursor CLI (Grok 4.6) in headless mode. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
 ---
 
 # Cursor Delegate
@@ -143,7 +143,7 @@ CHAT_ID=$(cursor agent create-chat)
 # text yourself before dispatching.
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model cursor-grok-4.5-medium \
+  --model cursor-grok-4.6-medium \
   --resume "$CHAT_ID" \
   "$(cat <<'EOF'
 ...prompt body (Task / Background / Target files / Test requirements /
@@ -155,15 +155,15 @@ EOF
 
 Report `$CHAT_ID` alongside the task so it survives into the review round. There is no headless way to recover it afterwards.
 
-- **First implementation of a task**: `--model cursor-grok-4.5-medium` — non-fast on purpose (user directive, 2026-07-28): fast variants likely burn the included pool ~2x faster, and headless dispatches don't need the speed. Escalate to `cursor-grok-4.5-high` only for complex refactoring or tricky multi-step debugging
+- **First implementation of a task**: `--model cursor-grok-4.6-medium` — non-fast on purpose (user directive, 2026-07-28): fast variants likely burn the included pool ~2x faster, and headless dispatches don't need the speed. Escalate to `cursor-grok-4.6-high` only for complex refactoring or tricky multi-step debugging
 - **Every review-fix round after that**: `--model composer-2.5-fast` (user directive, 2026-07-28: fix rounds are short, speed is worth it there) with `--resume <chatId>`, using the chat id recorded when the task was dispatched — not `--continue` (see Session management)
 - Verify the exact id with `cursor agent models` before scripting it — ids change between Cursor releases and a wrong `--model` silently falls back
 - Do NOT use `--yolo`. Use default approval-based execution
 
 #### Model traps
 
-- **`grok-4.5-fast-high` is not a high-effort model.** It is an old alias whose effort is medium despite "high" in the name (fast-tier sibling of `cursor-grok-4.5-medium`). Do not use it — the name reads as an escalation but buys nothing.
-- **Escalation is `cursor-grok-4.5-high` (non-fast, per the 2026-07-28 directive), and it is not free of cost in time.** High effort spends more reasoning tokens. Escalate only when the extra reasoning is likely to save a review round-trip — complex refactoring, tricky multi-step debugging — not as a general "be more careful" knob.
+- **4.6 tiers are `low` / `medium` / `high` / `xhigh`, each with a `-fast` sibling — the effort in the name is real.** (Unlike the 4.5 era, where `grok-4.5-fast-high` was an old alias whose effort was actually medium. Any legacy `grok-4.5-*` id you find in an old prompt is stale — bump it.) `cursor-grok-4.6-xhigh` exists but is not a sanctioned default; treat `high` as the ceiling unless the user asks for more.
+- **Escalation is `cursor-grok-4.6-high` (non-fast, per the 2026-07-28 directive), and it is not free of cost in time.** High effort spends more reasoning tokens. Escalate only when the extra reasoning is likely to save a review round-trip — complex refactoring, tricky multi-step debugging — not as a general "be more careful" knob.
 - **Never pass a Codex model** (`gpt-5.3-codex-high` etc.) as a Cursor `--model`. Codex is the reviewer side. The one place codex appears as an implementer is the quota fallback below, where it runs as its own CLI, not as a Cursor model.
 
 ### 3b. Quota fallback: implement via the codex CLI when Cursor's quota is gone
@@ -237,7 +237,7 @@ CHAT_ID=$(cursor agent create-chat)
 # 2. First implementation into that session (quoted heredoc — same rule as step 3)
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model cursor-grok-4.5-medium \
+  --model cursor-grok-4.6-medium \
   --resume "$CHAT_ID" \
   "$(cat <<'EOF'
 ...prompt body...
@@ -276,6 +276,6 @@ Why mint it instead of recovering it later: `cursor agent ls` is an **interactiv
 | `-p` | Headless output (required for CLI execution) |
 | `--trust` | Trust workspace (required for headless mode) |
 | `--workspace <path>` | Working directory |
-| `--model <model>` | Model selection (first round: cursor-grok-4.5-medium / fix rounds: composer-2.5-fast) |
+| `--model <model>` | Model selection (first round: cursor-grok-4.6-medium / fix rounds: composer-2.5-fast) |
 | `--continue` | Continue previous session |
 | `--resume <chatId>` | Resume specific session |
