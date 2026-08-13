@@ -24,7 +24,7 @@ So, before dispatching:
 
 - Project conventions that live in `.cursor/rules` or `AGENTS.md` → Cursor has them, don't repeat them.
 - **A required skill that lives in the synced dir (`.cursor/skills/` ← `~/.agents/skills/`) → invoke it by name in the prompt**: `/skill-name` for Cursor, `$skill-name` for Codex (both are official explicit-invocation syntax). Add "follow it before starting" so it's an instruction, not a mention.
-- **A required skill that is NOT in the synced dir (plugin skills under `~/.claude/plugins/` — superpowers etc.) → resolve its absolute path and put a read-first instruction in the prompt** ("最初にこのファイルを読み、従うこと" + a short read-back requirement). Cursor reads files, so this is equivalent to pasting the body, but the prompt stays short and the implementer always gets the *current* version of the skill instead of a paste-time snapshot. The TDD skill is the standing example.
+- **A required skill that is NOT in the synced dir (plugin skills under `~/.claude/plugins/` — superpowers etc.) → resolve its absolute path and put a read-first instruction in the prompt** ("最初にこのファイルを読み、従うこと" + a short read-back requirement — **which you must then read and check; see "Capture the whole reply"**). Cursor reads files, so this is equivalent to pasting the body, but the prompt stays short and the implementer always gets the *current* version of the skill instead of a paste-time snapshot. The TDD skill is the standing example.
 - **Ad-hoc constraints that are not files → paste them as literal text.** Caller contracts from impact analysis, task-specific forbidden actions, blast-radius notes — these exist only in Claude Code's head, so they must go in verbatim.
 - **Never dump the whole `CLAUDE.md`.** Most of it is Claude-Code-side orchestration — review workflows, skill routing, hook behavior, git safety, browser tool selection. Cursor executing those would be wrong, not just wasteful. Filter: *would the implementer need this rule while writing this code?* If no, it stays on Claude Code's side.
 - If a project keeps its implementer-facing rules solely in `CLAUDE.md`, the durable fix is an `AGENTS.md` carrying just that subset so both agents read the same file — otherwise every dispatch has to re-paste.
@@ -154,6 +154,44 @@ EOF
 ```
 
 Report `$CHAT_ID` alongside the task so it survives into the review round. There is no headless way to recover it afterwards.
+
+#### Capture the whole reply, then check the read-back
+
+**Never pipe the dispatch through `head`/`tail`.** The read-back you demanded arrives at the
+*start* of the reply, so `| tail -N` throws away the one artifact that proves the skill was
+read — and leaves you unable to tell "the constraint was ignored" from "I deleted the evidence."
+Truncating also makes you liable to assert a failure you cannot actually support.
+
+Redirect to a file and read what you need from it:
+
+```bash
+LOG=<scratchpad>/cursor-<task>.log
+cursor agent -p --trust --workspace "<project-dir>" --model <model> --resume "$CHAT_ID" \
+  "$(cat <<'EOF'
+...prompt body...
+EOF
+)" > "$LOG" 2>&1
+head -20 "$LOG"   # read-back
+tail -40 "$LOG"   # completion report
+```
+
+**Then actually check it.** A read-back requirement you never verify is not a control — it is a
+comment. Confirm the reply opens with the recitation and that it names the actual procedure
+(RED before implementation, etc.) rather than restating your prompt. If it is missing, or generic
+enough that it could have been written without opening the file, **send the task back**; do not
+accept the work and do not report the skill as followed.
+
+To make the check mechanical, require a fixed shape in the prompt:
+
+```
+## 出力の形式（必須）
+応答の冒頭に、必ず次の 2 つをこの順で書くこと:
+1. `## TDD 手順の復唱` — 読んだ SKILL.md の要点 3 行
+2. `## ponytail 方針の復唱` — 要点 1 行
+この 2 つが無い応答は差し戻す。
+```
+
+The same rule applies to the codex fallback in 3b.
 
 - **First implementation of a task**: `--model cursor-grok-4.6-medium` — non-fast on purpose (user directive, 2026-07-28): fast variants likely burn the included pool ~2x faster, and headless dispatches don't need the speed. Escalate to `cursor-grok-4.6-high` only for complex refactoring or tricky multi-step debugging
 - **Every review-fix round after that**: `--model composer-2.5-fast` (user directive, 2026-07-28: fix rounds are short, speed is worth it there) with `--resume <chatId>`, using the chat id recorded when the task was dispatched — not `--continue` (see Session management)
