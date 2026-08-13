@@ -212,6 +212,13 @@ def cmd_upload(args):
 
 
 def cmd_list_box(args):
+    # Box一覧APIは limit の上限が100で、オフセット/ページ指定が無い。
+    # 101件以上を一度に見る手段が無いので、全件棚卸しでの重複チェックは
+    # 原理的に不可能。重複判定は必ず --name のサーバー側完全一致で行う。
+    if args.limit > 100:
+        raise SystemExit(
+            "list-box: --limit の上限は100です(APIがページングに非対応)。"
+            "重複チェックは --name でファイル名を指定してください。")
     token = get_access_token()
     headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
     q = {"limit": args.limit}
@@ -311,11 +318,41 @@ def mcp_call(tool, arguments):
 
 
 def cmd_transactions(args):
-    out = mcp_call(
-        "mfc_ca_getTransactions",
-        {"start_date": getattr(args, "from"), "end_date": args.to},
-    )
-    print(json.dumps(out, ensure_ascii=False, indent=1))
+    """全ページを取得して1つのJSONにまとめて返す。
+
+    getTransactions は既定 per_page=50 で、指定期間の件数が多いと
+    total_pages > 1 になる。1ページ目だけを見て突合すると明細を静かに
+    取りこぼし「証憑に対応する決済がない」と誤判定するため、必ず
+    メタデータの total_pages 分だけ回して結合する。
+    """
+    base = {
+        "start_date": getattr(args, "from"),
+        "end_date": args.to,
+        "per_page": args.per_page,
+        "order": "asc",
+    }
+    if args.account:
+        base["connected_account_id"] = args.account
+
+    merged, seen, page, total_pages = [], set(), 1, 1
+    while page <= total_pages:
+        q = dict(base, page=page)
+        out = mcp_call("mfc_ca_getTransactions", q)
+        if not isinstance(out, dict):
+            raise SystemExit("transactions: 想定外の応答: %r" % (out,)[:200])
+        meta = out.get("metadata") or {}
+        total_pages = meta.get("total_pages") or 1
+        for t in out.get("transactions") or []:
+            if t.get("id") in seen:
+                continue
+            seen.add(t.get("id"))
+            merged.append(t)
+        page += 1
+
+    print(json.dumps(
+        {"metadata": {"total_count": len(merged), "pages_fetched": total_pages},
+         "transactions": merged},
+        ensure_ascii=False, indent=1))
     return 0
 
 
@@ -405,6 +442,9 @@ def main(argv=None):
     p = sub.add_parser("transactions")
     p.add_argument("--from", required=True)
     p.add_argument("--to", dest="to", required=True)
+    p.add_argument("--per-page", dest="per_page", type=int, default=500,
+                   help="1ページあたり件数(最大500)。全ページ自動取得するので通常は既定のままでよい")
+    p.add_argument("--account", help="connected_account_id で絞り込む(任意)")
     p.set_defaults(fn=cmd_transactions)
     p = sub.add_parser("auth-url")
     p.set_defaults(fn=cmd_auth_url)

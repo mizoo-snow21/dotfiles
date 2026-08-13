@@ -70,7 +70,11 @@ python3 "$SKILL_DIR/scripts/mf_api.py" upload <saved files>...
 - Duplicate check before upload (last line of defense if state is lost): filenames are
   deterministic (derived from the attachment key), so for each file to be uploaded run
   `mf_api.py list-box --name "<final_name>"` — a server-side exact-name search
-  (`file_name` filter, verified against the real API; independent of pagination limits).
+  (`file_name` filter, verified against the real API). Always dedupe this way, never by
+  pulling an inventory and scanning it: the Box list endpoint caps `limit` at 100 and has
+  no offset or page parameter, so once Box holds more than 100 files you simply cannot see
+  the older ones. A listing that comes back without your file therefore proves nothing.
+  `list-box` refuses `--limit` above 100 rather than letting the API 400 silently.
   On a hit, skip the upload and settle it with that file_id via `mark --uploaded`.
   **Mandatory for every file when the state is new or was rebuilt**; optional otherwise
   (the state's attachment-key record is the primary defense).
@@ -157,6 +161,11 @@ pdftoppm -png -r 140 -f 1 -l 1 <receipt>.pdf <out-prefix>       # then read the 
 #       slice 2: previous end + 1d → min(that + 366d, end)
 #       …until you reach `end`.
 python3 "$SKILL_DIR/scripts/mf_api.py" transactions --from <slice start> --to <slice end>
+#     `transactions` walks every page itself and returns the merged, id-deduped set, so
+#     what you get back is the whole slice. It did not always: it used to send one request
+#     with the default per_page=50 and hand you page 1 as if it were everything, which
+#     turned a busy month into a silent 50-row truncation and made present charges look
+#     missing. If you ever hand-roll a getTransactions call, honour `metadata.total_pages`.
 #     Merge every slice (dedupe by transaction id) before matching, so the ±3-day rule
 #     sees one continuous set rather than per-slice fragments.
 #     Stopping short of full coverage is a valid choice — but then the evidence that could
@@ -242,6 +251,31 @@ charge you attach to. (Real case: five PROGRIT receipts for 2025-03…07 were al
 on 2026-02-25; dating the journals by email put them in the wrong fiscal year and they had
 to be deleted.)
 
+**MF's auto-suggested 勘定科目 is a guess, and a bad one often enough to matter — read every
+row before registering.** The 連携サービスから入力 screen pre-fills each unregistered row with an
+account, and it is easy to read that as "MF already classified this". It didn't; it pattern-
+matched. Real misses from one session: 12 ANTHROPIC charges proposed as 接待交際費 when every
+prior ANTHROPIC journal was 通信費, a Korean restaurant proposed as 仕入高, and a ¥1,200 lunch
+proposed as 事業主貸/対象外 (which also drops the 課税仕入 entirely). The 税区分 side is usually
+fine — picking the right account normally snaps 税区分 to 課仕10%/適格 by itself — so the account
+column is the one to check. This matters most with 一括登録, where a single click commits every
+checked row at whatever MF guessed; scan the whole column first, fix what's wrong, and only
+then register. Cross-checking against how the same vendor was booked last month is the fastest
+way to spot a drift.
+
+**When the journalize API is refused, drive the UI instead.** `postTransactionJournalize` can be
+blocked by the auto-mode classifier as a financial write. `postJournals` may still go through,
+so try it before falling back, but the dependable path is 自動で仕訳 → 連携サービスから入力 →
+filter by 摘要 → set 勘定科目 → 登録, which produces exactly the same journal with the card's
+未払金 on the credit side and the transaction properly linked.
+
+**`postJournals` takes tax-inclusive amounts on both sides.** Passing the tax-exclusive figure
+looks reasonable and fails with `仕訳貸借がバランスしていません`, because the request schema has no
+`tax_value` field — that appears only in the response. Send the gross amount for both debitor
+and creditor and let MF derive the tax from `tax_id`: ¥800 at 課仕10% comes back as value 728 /
+tax_value 72, ¥3,000 as 2,728 / 272. Both matched the printed receipts exactly, so this is also
+a free check that you picked the right 税区分.
+
 **Find the existing card journal before creating anything.** A connected business card
 already auto-journalizes each charge (借 expense / 貸 未払金). Search 仕訳帳 by **amount**
 (値 filter) — the card descriptor (摘要) for one vendor changes over time (Anthropic =
@@ -313,10 +347,15 @@ filter hides already-attached files (prevents double-assignment) but also hides 
 mis-attached one, so always verify each journal's attached receipt matches on date+amount
 (a July-7 receipt once sat on the July-8 journal while July-7 was empty).
 
-**Deleting a journal** fires a native `confirm()` that freezes the browser extension. Only
-after the user approves exactly which 取引No to delete, inject `window.confirm = () => true`
-(javascript tool), then delete one at a time in the foreground; re-inject after any page
-navigation.
+**Deleting a journal** takes effect immediately — 仕訳帳 → the row's ⋮ → 削除 removes it with
+no confirmation dialog at all. Earlier versions of this skill claimed a native `confirm()`
+appeared and told you to pre-empt it by injecting `window.confirm = () => true`; that is
+wrong on both counts. There is no dialog, and the javascript tool is refused by the auto-mode
+classifier anyway, so the "workaround" only wastes a turn. The practical consequence is the
+opposite of what that note implied: nothing stands between your click and a deleted journal,
+so get the user's explicit approval of exactly which 取引No to delete *before* opening the
+menu, delete one at a time, and confirm each removal through the API rather than the screen.
+Deleted entries remain visible under 削除済仕訳履歴 if you need to trace one.
 
 **Not every payment email is an expense — classify direction.** A 支払通知書 from a client is
 *sales*, not expense, evidence. If it carries **your** 登録番号, the required 適格請求書 fields
