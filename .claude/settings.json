@@ -127,7 +127,8 @@
     "claude-mem@thedotmack": true,
     "ralph-loop@claude-plugins-official": true,
     "superpowers@superpowers-marketplace": true,
-    "slack@claude-plugins-official": false
+    "slack@claude-plugins-official": false,
+    "pyright-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
