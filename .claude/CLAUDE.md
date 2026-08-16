@@ -31,6 +31,22 @@ If a skill is unregistered or broken and cannot be loaded, **do not substitute f
 - Before creating anything that leaves the machine (GitHub issue, PR, comment, public document, external message), check the table **before typing the first command** — not after.
 - Example: you can run `gh issue view` / `comment` / `edit` all day, but `gh issue create` is a different kind of action — always load `github-issues`.
 
+## Code Intelligence Routing
+
+Choose the narrowest tool that answers the question correctly.
+
+- Use LSP first for symbol definitions, references, type information,
+  diagnostics, and symbol resolution.
+- Use GitNexus for repository-wide architecture, execution flows,
+  dependency analysis, and change impact analysis.
+- Use Read for understanding a known file.
+- Use Grep/Glob/rg for literal text, config, logs, comments,
+  and exploratory text search.
+
+Do not use grep as a substitute for LSP when the target is a resolvable code symbol.
+LSP-first navigation does not replace GitNexus impact analysis when repository-wide
+blast radius is non-trivial.
+
 ## Core Principles
 
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
@@ -142,7 +158,7 @@ If a skill is unregistered or broken and cannot be loaded, **do not substitute f
 - **Review findings are NOT fixed by Claude Code — send them back to the implementer session.** The binding rule is "whoever implemented it fixes their own work", not any particular CLI
 - **Pass prompts as inline heredocs** — Writing to `/tmp/cursor-*.md` and piping via `cat |` is forbidden (slow). The codex auto-review hook targets spec / plan documents only; Cursor prompts are out of its scope
 
-- **Run impact analysis before dispatch (projects with an impact tool such as GitNexus)** — "impact before editing" cannot be followed literally when the edit is delegated: Cursor does the editing, has no impact tool, and a diff only exists after the fact. Instead, **before dispatching to Cursor**, run impact analysis on the symbols the plan names and record the blast radius in the plan (no code has changed yet, so this genuinely is "before the edit"). HIGH/CRITICAL is a pre-dispatch gate: rethink the approach or get user approval. When you can, embed the blast radius in the Cursor prompt with a concrete instruction not to break the callers' contracts.
+- **Run impact analysis before dispatch, scoped to non-obvious blast radius (projects with an impact tool such as GitNexus)** — "impact before editing" cannot be followed literally when the edit is delegated: Cursor does the editing, has no impact tool, and a diff only exists after the fact. Instead, **before dispatching to Cursor**, resolve the target symbol and its direct references with LSP first (see Code Intelligence Routing). Escalate to GitNexus for repository-wide blast radius when the change touches **shared symbols, public interfaces, cross-module behavior, multiple callers, or any other case where blast radius isn't obvious** — record the blast radius in the plan (no code has changed yet, so this genuinely is "before the edit"). Skip the GitNexus pass when LSP shows the change is local, non-symbol, or isolated with an obvious blast radius. HIGH/CRITICAL is a pre-dispatch gate: rethink the approach or get user approval. When you can, embed the blast radius in the Cursor prompt with a concrete instruction not to break the callers' contracts.
   - **Catching symbols the plan did not foresee (mandatory)**: pre-dispatch impact only covers what the plan predicted. After Cursor returns and before committing, reconcile the symbols actually changed against the set you already assessed, and re-run impact on anything unassessed. Never commit unassessed changes. If the spread is wider than expected, or HIGH/CRITICAL appears, fold it back into the plan (re-dispatch) or send the work back.
   - **A fresh index is a precondition** — impact tools read an index, so stale data gives wrong answers. Re-index before a planning batch. Tool usage: `Skill(gitnexus-impact-analysis)` / `Skill(gitnexus-cli)`
 
