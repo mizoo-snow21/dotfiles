@@ -1,6 +1,6 @@
 ---
 name: opencode-delegate
-description: Delegate implementation tasks and document reviews to the opencode CLI in headless mode — default model `opencode-go/kimi-k3`. Use when the user says "opencode", "opencode go", "opencodeで実装", "opencodeに投げて", "opencodeに実装させて", or wants an implementer or reviewer other than Cursor/Codex — including when codex is out of quota and a review still has to happen. Read this before writing any `opencode run` command — the headless permission trap, the model roster, and the skill-visibility differences are here.
+description: Delegate implementation tasks and document reviews to the opencode CLI in headless mode — default model `opencode-go/glm-5.3`. Use when the user says "opencode", "opencode go", "opencodeで実装", "opencodeに投げて", "opencodeに実装させて", or wants an implementer or reviewer other than Cursor/Codex — including when codex is out of quota and a review still has to happen. Read this before writing any `opencode run` command — the headless permission trap, the model roster, and the skill-visibility differences are here.
 ---
 
 # opencode Delegate
@@ -14,9 +14,10 @@ never drift apart.
 
 Everything below was verified against opencode **1.18.14** on 2026-08-07.
 
-**Default model: `opencode-go/kimi-k3`** — for implementation, fix rounds, and document
-review alike (user directive, 2026-08-07). One model everywhere means one set of quirks to
-learn instead of four; deviate only for a reason you can name.
+**Default model: `opencode-go/glm-5.3`** — for implementation, fix rounds, and document
+review alike (user directive, 2026-08-15, superseding the 2026-08-07 `kimi-k3` default:
+glm is the cheaper model and these runs are long). One model everywhere means one set of
+quirks to learn instead of four; deviate only for a reason you can name.
 
 ## What opencode already knows
 
@@ -63,6 +64,19 @@ Scoped to the plugin cache, this only buys read access to skill files the prompt
 points at. Widen it only for a path the task genuinely needs; a permanent version belongs in
 `~/.config/opencode/opencode.jsonc` (restart required — config is not hot-reloaded).
 
+**The same trap fires on a mistyped path, and it kills the whole run.** Observed 2026-08-15:
+mid-review the agent reached for
+`/Users/mizoo/mc-morisumorisatei-bit/…` — one letter off from the real
+`mc-mitsumorisatei-bit` — which lands outside `--dir`, raises `external_directory`,
+auto-rejects, and ends the dispatch with the review half-written. Two defences:
+
+- **Give paths in the prompt relative to `--dir`**, not absolute. The agent then has nothing
+  to mistype a prefix onto. (Plugin skills under `~/.claude/plugins/` are the exception —
+  those must stay absolute, which is exactly why they need the permission above.)
+- **Add the project root itself to `external_directory`** when the run reads widely inside it.
+  It costs nothing (the agent already has `--dir` access to that tree) and converts a typo
+  from a fatal rejection into a harmless failed read the agent can recover from.
+
 ## Dispatch
 
 ```bash
@@ -80,7 +94,7 @@ python3 -c 'import os,sys;[print(os.path.realpath(p)) for p in sys.argv[1:] if p
 TITLE="t3-fix-add-$(date +%H%M)"   # unique — this is how you find the session later
 
 opencode run --dir "<project-dir>" \
-  -m opencode-go/kimi-k3 \
+  -m opencode-go/glm-5.3 \
   --agent build \
   --title "$TITLE" \
   "$(cat <<'EOF'
@@ -114,12 +128,28 @@ EOF
 
 `opencode models` lists what the **active credential** exposes, not the full catalog
 (`opencode auth list` shows which: here a single **OpenCode Go** entry → the `opencode-go/*`
-half). Use `opencode-go/kimi-k3` unless something below applies.
+half). Use `opencode-go/glm-5.3` unless something below applies.
 
 Roster verified 2026-08-07 by sending a trivial prompt to all 18 `opencode-go` models —
 17 answered. Working: `kimi-k3`, `kimi-k2.7-code`, `kimi-k2.6`, `grok-4.5`, `gpt-5.6-luna`,
 `glm-5.2`, `glm-5.1`, `qwen3.8-max`, `qwen3.7-max`, `qwen3.7-plus`, `qwen3.6-plus`,
 `deepseek-v4-pro`, `minimax-m3`, `minimax-m2.7`, `mimo-v2.5-pro`, `mimo-v2.5`, `hy3`.
+
+**The roster grows — re-probe instead of trusting this list.** On 2026-08-15 `opencode models`
+showed **19** `opencode-go` entries, and the new one is **`glm-5.3`**, verified by dispatch
+(`--agent plan`, trivial prompt, answered). It was not in the 2026-08-07 roster above.
+A model missing from this section is not evidence it is unavailable; `opencode models | grep <name>`
+then one throwaway dispatch settles it in seconds.
+
+**`glm-5.3` is now the default for everything** (user directive, 2026-08-15) — implementation,
+fix rounds, and document review. It is the cheaper model, and these runs are long enough for
+that to matter. `kimi-k3` remains in the roster; reach for it only when you can name a reason
+glm fell short on the task at hand.
+
+Verified on a real job (2026-08-15): glm-5.3 reviewed a 1,500-line implementation plan and,
+rather than taking its factual claims on trust, **re-ran the measurements itself** — row counts,
+annotation breakdowns, scoring-target totals — and confirmed each one before reporting. It found
+a real defect nine rounds of prior review had missed. It is not a downgrade for review work.
 
 - **`deepseek-v4-flash` is the one failure** — "only available hosted in China and requires…".
   A region opt-in, not a broken credential; the others in that family answer fine.
@@ -137,7 +167,7 @@ The catalog cache (`~/.cache/opencode/models.json`) carries `gpt-5.6-sol` under 
 `--model opencode-go/gpt-5.6-sol` returns a 500. Adding an OpenAI / Copilot / OpenRouter
 credential with `opencode auth login` would make `--model openai/gpt-5.6-sol` work. Until then
 sol lives only in the codex CLI, and when codex hits its usage limit the review still has to
-run — that is what the kimi-k3 default is for.
+run — that is what the glm-5.3 default is for.
 
 ## Document review
 
@@ -165,7 +195,7 @@ opencode session list | grep "$TITLE"       # id + title + updated
 
 ```bash
 # Fix round — same session, explicit model each time (resuming does not restore it)
-opencode run --dir "<project-dir>" -s "$SID" -m opencode-go/kimi-k3 "$(cat <<'EOF'
+opencode run --dir "<project-dir>" -s "$SID" -m opencode-go/glm-5.3 "$(cat <<'EOF'
 ...review findings to fix, referencing the original task...
 EOF
 )" < /dev/null

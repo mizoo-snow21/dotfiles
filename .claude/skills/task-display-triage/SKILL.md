@@ -23,6 +23,7 @@ These came from disassembling those two specific versions. On any later Claude C
    - As of v2.1.217/218: an entry matters **only if it is a substring of the current model id** — a non-empty array alone is NOT activation. On a newer binary, confirm the gate still reads this flag the same way before concluding anything.
    - Confirmed match (on a version where the mechanics are verified) → it's **Anthropic-side**. Report to the user as a blocker; nothing local will fix it.
 3. **No match** → check in order: session env (`CLAUDE_CODE_ENABLE_TASKS`, `CLAUDE_CODE_CHILD_SESSION`), Claude Code version (did it just update? if so, the v2.1.217/218 facts above may no longer hold — re-verify the gates in the new binary before blaming anything, including cmux), Anthropic infra status.
+   - **Measure env at the MAIN claude process, never from the Bash tool.** Claude Code injects `CLAUDE_CODE_CHILD_SESSION=1` into every subprocess it spawns, so `echo $CLAUDE_CODE_CHILD_SESSION` inside the Bash tool prints 1 in EVERY session — it proves nothing (this exact misdiagnosis happened 2026-08-16). Procedure: walk the ancestry (`ps -o ppid= -p $$` upward) to the `claude` PID, then `ps eww -p <pid> -o command= | tr ' ' '\n' | grep '^CLAUDE_CODE_'`. Also note: per the 2.1.217/218 analysis the task-tool gate does not reference `CHILD_SESSION` at all — it matters only for how a *nested* claude launch behaves.
 4. **Try recovery**: re-run ToolSearch again; session restart. **Propose `claude update` to the user rather than running it** — it replaces their installed binary, and mid-investigation it also destroys the evidence (the binary you were inspecting).
 5. **Last resort** — `CLAUDE_CODE_ENABLE_TASKS=false` in settings env re-enables the legacy TodoWrite checklist path (code-verified in 2.1.217/218). **Propose it to the user first**; it disables the new Task system session-wide.
 
@@ -37,5 +38,6 @@ These came from disassembling those two specific versions. On any later Claude C
 |---|---|
 | "kill-switch array is non-empty → it's active" | Only a **substring match against the current model id** activates it |
 | "cmux wraps claude, so cmux broke it" | Disproven 2026-07-23; wrapper injects hooks only |
+| "`echo $CLAUDE_CODE_CHILD_SESSION` in the Bash tool shows 1 → this session is a child" | The Bash tool subshell ALWAYS shows 1 (claude injects it into its children). Check the main claude process env via `ps eww` (recurred 2026-08-16) |
 | Falling back to a markdown checklist "temporarily" | Explicitly forbidden; report the blocker instead |
 | Setting `CLAUDE_CODE_ENABLE_TASKS=false` silently | It's a session-wide downgrade — needs user approval |
