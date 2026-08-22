@@ -1,6 +1,6 @@
 ---
 name: codex-review
-description: Run a codex (GPT-5.6 Sol) review via `codex exec` and iterate until no critical findings remain. Use for code (PR or staged changes) before merging, and equally for documents before they are shown or published — implementation plans, specs, todo docs, and issue / PR bodies.
+description: Run a codex (GPT-5.6 Sol) review via `codex exec` and iterate until no critical findings remain. Use for code (PR or staged changes) before merging, and for implementation plans, specs, and todo docs before they are shown. Not for issue / PR bodies — codex usage limit is tight, so it is reserved for the documents where review pays off most.
 ---
 
 # Codex Review
@@ -12,7 +12,9 @@ Run a GPT-5.6 Sol review via `codex exec`, then iterate fixes until clean.
 Two review targets, same loop:
 
 - **Code**: the current PR or staged changes, before merging.
-- **Documents**: implementation plans, specs, todo docs, and anything about to leave the machine (issue bodies, PR bodies). Run the loop **before** showing the document to the user or creating the item — draft → review → zero findings → publish, so it is right the first time.
+- **Documents**: implementation plans, specs, todo docs. Run the loop **before** showing the document to the user — draft → review → zero findings → present, so it is right the first time.
+
+> **issue / PR bodies are out of scope** (user directive, 2026-08-22). The usage limit is tight, so it is spent on plans and specs, where a defect costs a whole implementation round. When an externally published document needs fact-checking, dispatch a subagent (Fable) instead.
 
 ## Workflow
 
@@ -46,7 +48,7 @@ Two review targets, same loop:
    " < /dev/null
    ```
 
-   **Documents** (plans, specs, todo docs, issue / PR bodies) — do not reuse the code prompt; its focus areas miss specification-level defects:
+   **Documents** (plans, specs, todo docs) — do not reuse the code prompt; its focus areas miss specification-level defects:
    ```bash
    codex exec -m gpt-5.6-sol "Review this document. Do not nitpick. Only point out critical issues.
 
@@ -55,7 +57,6 @@ Two review targets, same loop:
    - Unverified claims stated as fact; missing evidence for key assertions
    - Steps that cannot be executed as written (missing prerequisites, wrong order, references to things that don't exist)
    - Scope gaps: requirements the document silently drops or quietly expands
-   - For anything published externally (issue / PR body): wrong or missing links, sensitive data, instructions a reader cannot follow
 
    === <document full path and contents> ===
 
@@ -127,7 +128,7 @@ Running a review never authorizes shipping. Match the action to what the user ac
 | Action | Allowed without asking again? |
 |---|---|
 | Run codex, report findings | Yes — that is the request |
-| Edit a draft **you are producing** (your plan / spec / issue body), then re-review | Yes — iterating to zero findings is the point |
+| Edit a draft **you are producing** (your plan / spec), then re-review | Yes — iterating to zero findings is the point |
 | Edit code **you are implementing** in this task, then re-review | Yes |
 | Edit files the user only asked you to **look at** | No — report the findings and ask |
 | `git commit` / `git push` | No — ask |

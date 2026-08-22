@@ -6,7 +6,7 @@ If a skill is unregistered or broken and cannot be loaded, **do not substitute f
 
 | Trigger | Skill |
 |---|---|
-| Before showing a plan / spec / todo / issue body / PR body to the user | `codex-review` |
+| Before showing an implementation plan / spec / todo doc to the user | `codex-review` |
 | Dispatching implementation to Cursor | `cursor-delegate` |
 | Before writing implementation or bugfix code | `superpowers:test-driven-development` |
 | Bug / test failure / unexpected behavior (before proposing a fix) | `superpowers:systematic-debugging` |
@@ -78,7 +78,8 @@ blast radius is non-trivial.
 - One tack per subagent for focused execution
 
 ### 3. Plan / Todo Review Loop
-- **Trigger**: implementation plan / spec / todo documents, and anything published externally (issue body / PR body) — before showing to the user or creating it
+- **Trigger**: implementation plan / spec / todo documents — before showing to the user
+- **issue body / PR body は対象外** (user directive, 2026-08-22)。codex の利用上限が厳しいため、レビューの価値が最も高い文書に絞る。外部公開物の事実確認が要るときは Fable などの subagent に出す
 - **Procedure**: `Skill(codex-review)` (document review is covered by the skill)
 - **Local policy**: when an already-created issue / PR needs fixing, **edit in place**. The create → close → reopen churn destroys audit context — avoid it
 
