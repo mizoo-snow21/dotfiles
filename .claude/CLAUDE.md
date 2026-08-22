@@ -199,6 +199,25 @@ At the start of a session, if the working project's CLAUDE.md contains a `<!-- P
 - **共有文書（OneDrive/SharePoint のWord等）は、ブラウザ上で直接編集して仕上げるのが既定**（user directive, 2026-08-06）。ローカルにダウンロードして直しファイルごと差し替える経路は、所有者と書き込み権限を確認したうえでの例外。1項目が詰まっても案件ごと別ルートに移さず、項目単位でルートを選び直す（詳細は `Skill(word-clipboard)` の Route C）
 - **Which browser tool: local UI/frontend dev → `Skill(webapp-testing)` (Playwright); real logged-in browser / external sites → Claude in Chrome.** For screenshots, DOM/console inspection, or driving the app under development (localhost / the code in this repo), invoke **`webapp-testing`** — do NOT default to Claude-in-Chrome just because the word "screenshot" was used. Reserve Claude in Chrome for tasks that genuinely need the user's real browser session (authenticated sites, external pages) or when "Chrome" is explicitly requested. The trap: Claude-in-Chrome's MCP tools are always loaded and prominent, so "take a screenshot" drifts to them by default even though webapp-testing is the right tool for dev work.
 
+## Worktree の後始末
+
+worktree は使い終わったら残さない。`~/.claude/bin/worktree-reap.sh` が SessionStart で自動実行され、
+**untracked を退避してから削除**する（退避先 `~/.local/state/claude/worktree-attic/`、30日で失効。
+dotfiles リポジトリの中に置くと `git clean -fdx` で退避データごと消えるため外に出している）。
+
+- **恒久的な成果物を worktree 内に untracked のまま置かない。** attic は事故回収層であって保管場所ではない。
+  知見（`tasks/lessons.md` 等）・測定スクリプト・調査メモは、**リポジトリにコミットするか、
+  worktree の外**（`~/.claude/artifacts/<repo>/<issue>/` など）へ書く。
+  実例: 2026-08-22 に `tasks/lessons.md` へ 161 行の知見が untracked で溜まり、
+  worktree 削除で失いかけた（main 側に未反映だった）
+- **マージ済みの判定に `git branch --merged` / `git merge-base --is-ancestor` を使わない。**
+  squash merge のリポジトリでは、マージ済みでもブランチのコミットが main の祖先にならない。
+  `gh pr list --head <branch> --state merged` を使う
+- **`git worktree add -b X origin/main` は upstream を `origin/main` に設定する。**
+  「upstream がある」は push 済みを意味しない。push 済みの判定は upstream が `origin/<自分のブランチ名>`
+  であることを確認する。ここを誤ると未 push の作業ブランチを消す
+- 削除は `git worktree remove`（`rm -rf` + `prune` ではない）。使用中プロセスの有無も確認する
+
 ## Git Safety
 
 - git commands that branch on success/failure (rebase / merge / cherry-pick) must not be judged through a pipe — a trailing `tail`/`head` returns exit 0 and hides the real failure. Use `cmd; rc=$?` and check `$rc` directly.

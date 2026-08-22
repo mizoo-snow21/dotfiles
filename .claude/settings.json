@@ -116,6 +116,18 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/bin/worktree-reap.sh",
+            "timeout": 120,
+            "statusMessage": "Reaping finished git worktrees..."
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
