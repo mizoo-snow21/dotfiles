@@ -1,6 +1,6 @@
 ---
 name: cursor-delegate
-description: Delegate implementation tasks to Cursor CLI (Grok 4.6) in headless mode. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
+description: Delegate implementation tasks to Cursor CLI (Composer 2.5 Fast) in headless mode. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
 ---
 
 # Cursor Delegate
@@ -143,7 +143,7 @@ CHAT_ID=$(cursor agent create-chat)
 # text yourself before dispatching.
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model cursor-grok-4.6-medium \
+  --model composer-2.5-fast \
   --resume "$CHAT_ID" \
   "$(cat <<'EOF'
 ...prompt body (Task / Background / Target files / Test requirements /
@@ -166,7 +166,7 @@ Redirect to a file and read what you need from it:
 
 ```bash
 LOG=<scratchpad>/cursor-<task>.log
-cursor agent -p --trust --workspace "<project-dir>" --model <model> --resume "$CHAT_ID" \
+cursor agent -p --trust --workspace "<project-dir>" --model composer-2.5-fast --resume "$CHAT_ID" \
   "$(cat <<'EOF'
 ...prompt body...
 EOF
@@ -193,20 +193,20 @@ To make the check mechanical, require a fixed shape in the prompt:
 
 The same rule applies to the codex fallback in 3b.
 
-- **First implementation of a task**: `--model cursor-grok-4.6-medium` — non-fast on purpose (user directive, 2026-07-28): fast variants likely burn the included pool ~2x faster, and headless dispatches don't need the speed. Escalate to `cursor-grok-4.6-high` only for complex refactoring or tricky multi-step debugging
-- **Every review-fix round after that**: `--model composer-2.5-fast` (user directive, 2026-07-28: fix rounds are short, speed is worth it there) with `--resume <chatId>`, using the chat id recorded when the task was dispatched — not `--continue` (see Session management)
+- **Every dispatch uses `--model composer-2.5-fast`** — first implementation and every review-fix round alike (user directive, 2026-08-20). There is no per-round split and no escalation tier; this is the only sanctioned Cursor model
+- Review-fix rounds add `--resume <chatId>`, using the chat id recorded when the task was dispatched — not `--continue` (see Session management)
 - Verify the exact id with `cursor agent models` before scripting it — ids change between Cursor releases and a wrong `--model` silently falls back
 - Do NOT use `--yolo`. Use default approval-based execution
 
 #### Model traps
 
-- **4.6 tiers are `low` / `medium` / `high` / `xhigh`, each with a `-fast` sibling — the effort in the name is real.** (Unlike the 4.5 era, where `grok-4.5-fast-high` was an old alias whose effort was actually medium. Any legacy `grok-4.5-*` id you find in an old prompt is stale — bump it.) `cursor-grok-4.6-xhigh` exists but is not a sanctioned default; treat `high` as the ceiling unless the user asks for more.
-- **Escalation is `cursor-grok-4.6-high` (non-fast, per the 2026-07-28 directive), and it is not free of cost in time.** High effort spends more reasoning tokens. Escalate only when the extra reasoning is likely to save a review round-trip — complex refactoring, tricky multi-step debugging — not as a general "be more careful" knob.
+- **Any `cursor-grok-*` id — or a bare `composer-2.5` — found in an old prompt, script, or plan is stale.** Replace it with `composer-2.5-fast`.
+- **Do not swap the model when a task looks hard.** There is no escalation tier and no "be more careful" knob. If a task needs more than Composer delivers, split the task or ask the user — never pick a different model on your own.
 - **Never pass a Codex model** (`gpt-5.3-codex-high` etc.) as a Cursor `--model`. Codex is the reviewer side. The one place codex appears as an implementer is the quota fallback below, where it runs as its own CLI, not as a Cursor model.
 
 ### 3b. Quota fallback: implement via the codex CLI when Cursor's quota is gone
 
-Grok and Composer draw on the **same** Cursor plan quota, so when one hits its limit the other is normally gone too. (`--model auto` may still answer, but once implementation has moved to codex, that is no longer the sanctioned path.)
+Every Cursor model draws on the **same** plan quota, so when `composer-2.5-fast` reports `You're out of usage` there is nothing to switch to. (`--model auto` may still answer, but once implementation has moved to codex, that is no longer the sanctioned path.)
 
 ```bash
 # Same quoted-heredoc rule as Cursor dispatch — the prompt carries the resolved
@@ -227,7 +227,7 @@ EOF
 
 - `< /dev/null` on **every** invocation — without it a backgrounded codex hangs forever on the stdin pipe.
 - **Nothing else about the flow changes**: the TDD read-first path instruction still goes in the prompt, one task is still one fresh session, review fixes still go back to the same implementer session, and any impact / change-detection gates still apply.
-- Return to the Grok-writes / Composer-fixes split as soon as the quota resets (monthly cycle).
+- Return to Cursor (`composer-2.5-fast`) as soon as the quota resets (monthly cycle).
 
 ### 4. Claude Code verifies
 
@@ -275,14 +275,14 @@ CHAT_ID=$(cursor agent create-chat)
 # 2. First implementation into that session (quoted heredoc — same rule as step 3)
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model cursor-grok-4.6-medium \
+  --model composer-2.5-fast \
   --resume "$CHAT_ID" \
   "$(cat <<'EOF'
 ...prompt body...
 EOF
 )"
 
-# 3. Follow-ups (review fixes, etc.) — same id, Composer this time
+# 3. Follow-ups (review fixes, etc.) — same id, same model
 # NOTE: resuming does NOT inherit the session model (CLI default wins) — always pass --model explicitly
 cursor agent -p --trust \
   --workspace "<project-dir>" \
@@ -314,6 +314,6 @@ Why mint it instead of recovering it later: `cursor agent ls` is an **interactiv
 | `-p` | Headless output (required for CLI execution) |
 | `--trust` | Trust workspace (required for headless mode) |
 | `--workspace <path>` | Working directory |
-| `--model <model>` | Model selection (first round: cursor-grok-4.6-medium / fix rounds: composer-2.5-fast) |
+| `--model composer-2.5-fast` | Model selection — fixed, every round |
 | `--continue` | Continue previous session |
 | `--resume <chatId>` | Resume specific session |

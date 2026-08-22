@@ -18,6 +18,17 @@ case "$_lc" in
   *.md) ;;
   *) exit 0 ;;
 esac
+
+# 対象は実装計画・設計書だけ。issue / PR の本文や作業メモは対象外
+# （codex の利用上限が厳しく、レビューの価値が最も高い文書に絞る。user directive, 2026-08-22）。
+case "$_lc" in
+  */docs/superpowers/specs/*.md) ;;
+  */docs/superpowers/plans/*.md) ;;
+  */tasks/plan*.md) ;;
+  */tasks/todo.md) ;;
+  *) exit 0 ;;
+esac
+
 [ -f "$FILE_PATH" ] || exit 0
 
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
