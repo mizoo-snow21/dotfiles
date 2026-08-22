@@ -22,23 +22,22 @@ Ask the user for the folder link if they haven't given one — receipts usually 
 single standing folder, so it's worth asking whether it's the same one as last time rather than
 making them dig up the URL.
 
-That folder typically sits in a personal account the Drive MCP cannot see, so `search_files`
-with `parentId` comes back empty even though `get_file_metadata` on the folder id works. Don't
-conclude the folder is empty. Ask the user to set 一般的なアクセス to
-**リンクを知っている全員（閲覧者）** — sharing is normally off, so expect to ask each time — then
-read the file ids out of Drive's plain listing view in the browser:
+The folder sits in a personal account, but the working account has been added to it as an
+individual collaborator with edit rights, so the Drive MCP reaches it directly: `search_files`
+with `parentId = '<FOLDER_ID>'` enumerates the contents, `read_file_content` reads them, and
+`update_file` with a new `parentId` moves a file between folders. Try that first.
 
-```
-https://drive.google.com/embeddedfolderview?id=<FOLDER_ID>#list
-```
+If it comes back empty, the individual share has lapsed — ask the user to re-add the working
+account as 閲覧者/編集者. **Do not fall back to link sharing.** These are a person's complete
+payment records; リンクを知っている全員 exposes them to anyone who ever sees the URL and leaves no
+access trail, so a lapsed share is a reason to ask for re-sharing, not a reason to loosen it.
 
-`read_page` with `filter: "interactive"` gives one `/file/d/<ID>/view` href per row. The list
-lazy-loads, so scroll to the bottom and read again, then union both passes — a first read that
-stops short looks exactly like a complete one. Cross-check the count against `get_page_text`
-on the same page before moving on.
-
-Say plainly that link sharing exposes the receipts to anyone holding the URL, and remind the
-user to set it back to 制限付き once you're done reading.
+**Folders record state, and their names are a claim, not evidence.** The receipts are filed
+into `01_仕訳完了` / `02_未仕訳` / `03_要確認` / `99_重複`, and part of this job is putting each
+file where it belongs once you know. But verify before you believe: in one pass, 6 of the 8
+files in `02_未仕訳` and 9 of the 10 in `03_要確認` turned out to be fully journalized with
+evidence already attached. Read every file and match it against the ledger (step 3) regardless
+of which folder it sits in, then move it to the folder its real state warrants.
 
 ## 2. Read each receipt
 
@@ -48,10 +47,16 @@ receipts that have no text layer at all. Pull out 日付 / 金額 / 店名 / 登
 
 Two things are worth distrusting in that text:
 
-- **A file that returns no usable text** is an image-only scan Drive couldn't read. Download it
-  (`download_file_content` → base64, or `curl -sL "https://drive.google.com/uc?export=download&id=<ID>"`
-  while link sharing is on), confirm with `pdftotext -layout f.pdf - | tr -d '[:space:]' | wc -c`
-  returning 0, render with `pdftoppm -png -r 300 -f 1 -l 1 f.pdf out`, and read the PNG.
+- **A file that returns no usable text** is an image-only scan Drive couldn't read. Look for it
+  on disk first: `~/.local/state/mail2mf/gdrive/` holds Drive files a previous run already
+  pulled down, keyed by `gdrive_uploaded.json` (drive_id, md5, box_file_id, local_path). If it
+  is there, use it — `pdftotext -layout f.pdf - | tr -d '[:space:]' | wc -c` returning 0
+  confirms the empty text layer, then `pdftoppm -png -r 300 -f 1 -l 1 f.pdf out` and read the
+  PNG. If it isn't, the cheapest read is simply opening
+  `https://drive.google.com/file/d/<ID>/view` in the browser and screenshotting the preview —
+  Drive renders the page for you, and one zoomed screenshot answers 日付/金額/店名/登録番号
+  without any download at all. (`download_file_content` returns base64 into the conversation,
+  which cannot be written back out to a file, so it is not a route to a local PDF.)
 - **登録番号 and long digit strings are where OCR fails quietly.** One receipt's number came
   back as `170105010230` — wrong length, silently. Crop and magnify that line (`pdftoppm -r 500`,
   then crop; thermal receipts often print it sideways so rotate) and read it digit by digit
@@ -100,9 +105,17 @@ difference with the user rather than silently booking either figure as the expen
 ## 5. Upload, journalize, attach
 
 Upload only the receipts that survived step 3, checking each name against Box first
-(`list-box --name`, which is an exact-name server-side search — the endpoint caps `limit` at 100
-and cannot page, so an inventory scan proves nothing). Give files a self-describing name like
-`20260803_wolfgangs_76549.pdf`; you will be matching them by eye in the attach dialog later.
+(`list-box --name`, a server-side **substring, case-insensitive** search on `file_name` — the
+endpoint caps `limit` at 100 and cannot page, so an inventory scan proves nothing, but a vendor
+fragment like `wolfgangs` does find every copy). Give files a self-describing name like
+`20260803_wolfgangs_76549.pdf`; you will be matching them by eye in the attach dialog later,
+and the substring search only helps if the name carries the vendor and the amount.
+
+Search Box before uploading anything, not just for the exact name you are about to write:
+a previous run may already have put the same receipt there under a different convention. In
+one pass this produced 15 duplicate pairs — the same bytes under a descriptive name and under
+a mechanical `gdrive_<date>_<driveid>___<original>.pdf` one. Cleaning that up afterwards is
+UI-only, one file at a time (see mail2mf's Notes), so it is much cheaper to check first.
 
 Then journalize per mail2mf's rules — card charges through 連携サービスから入力, cash through
 `postJournals` (借 旅費交通費 / 貸 事業主借, gross amounts on both sides) — and attach each Box
@@ -117,5 +130,11 @@ no file got attached twice. The tax check is the strongest signal you picked the
 
 Close with a table of what was booked (仕訳No / 日付 / 金額 / 借方 / 消費税 / 支払手段), a list of
 what was skipped as already-booked, and a list of what is still pending with the reason
-(feed not synced, ambiguous match, amount discrepancy). Then remind the user to revoke the
-Drive link sharing.
+(feed not synced, ambiguous match, amount discrepancy).
+
+Then finish the filing: move every receipt into the folder its verified state warrants —
+`01_仕訳完了` once the journal holds its evidence, `02_未仕訳` while a charge is found but not
+yet booked, `03_要確認` when you could not read or match it, `99_重複` for a genuine duplicate
+scan. `update_file` with the destination `parentId` does the move. Afterwards re-list each
+folder and check the totals still add up to the original file count, so a silently failed move
+does not leave a receipt in limbo.

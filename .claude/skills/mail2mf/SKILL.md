@@ -69,12 +69,18 @@ python3 "$SKILL_DIR/scripts/mf_api.py" upload <saved files>...
   In all cases the attachment stays in `failed` (non-permanent) and will be retried.
 - Duplicate check before upload (last line of defense if state is lost): filenames are
   deterministic (derived from the attachment key), so for each file to be uploaded run
-  `mf_api.py list-box --name "<final_name>"` — a server-side exact-name search
-  (`file_name` filter, verified against the real API). Always dedupe this way, never by
-  pulling an inventory and scanning it: the Box list endpoint caps `limit` at 100 and has
-  no offset or page parameter, so once Box holds more than 100 files you simply cannot see
-  the older ones. A listing that comes back without your file therefore proves nothing.
+  `mf_api.py list-box --name "<final_name>"` — a server-side search on the `file_name`
+  filter. It matches on **substring, case-insensitively** (verified: `--name cursor`
+  returns `20260812_cursor_SCB7FYAO-0022_8.98usd.pdf` and friends), so a full filename
+  finds the exact file and a fragment — a vendor, an invoice number, a date — finds a
+  family of them. Always dedupe this way, never by pulling an inventory and scanning it:
+  the Box list endpoint caps `limit` at 100 and has no offset or page parameter, so once
+  Box holds more than 100 files you simply cannot see the older ones. A listing that comes
+  back without your file therefore proves nothing.
   `list-box` refuses `--limit` above 100 rather than letting the API 400 silently.
+  That substring behaviour is also how you answer "do we already have anything from this
+  vendor?" before concluding a receipt was never collected — search Box by vendor name
+  first, because a past run may have put it there by a route the state file never recorded.
   On a hit, skip the upload and settle it with that file_id via `mark --uploaded`.
   **Mandatory for every file when the state is new or was rebuilt**; optional otherwise
   (the state's attachment-key record is the primary defense).
@@ -218,6 +224,12 @@ Anthropic $110), so amount alone is not a key.
   (mark those with `journalizing_statuses: none` as "未仕訳" / not yet journalized)
 - **Evidence without payment**: evidence left unpaired
 
+Then widen the lens past this run's evidence and sweep the whole ledger for journals with an
+empty `voucher_file_ids`, grouped by vendor. A scan only ever reports on mail it can see, so
+a vendor that never sends attachments produces "no new candidates" forever while its evidence
+gap grows — the sweep is what surfaces it. See **"Vendors whose receipts never arrive as an
+attachment"** for what to do with what it finds.
+
 End the report by pointing the user to the next step. Attaching evidence and creating
 journals is a separate, opt-in phase — see **"Journalizing & attaching evidence"** below.
 (Note: a Box file can be attached to *any* existing journal from the 仕訳帳 paperclip, not
@@ -276,6 +288,19 @@ and creditor and let MF derive the tax from `tax_id`: ¥800 at 課仕10% comes b
 tax_value 72, ¥3,000 as 2,728 / 272. Both matched the printed receipts exactly, so this is also
 a free check that you picked the right 税区分.
 
+**Verify what you wrote with `getJournals`, not with the write call's own response.** The two
+report `value` differently: `getJournals` returns the tax-exclusive figure alongside
+`tax_value` (so gross = value + tax_value), while the response from `postTransactionJournalize`
+carries the gross in `value`. Adding the two together on the write response therefore inflates
+every amount by the tax and makes a perfectly correct batch look wrong — it briefly did, for
+eight journals at once. Re-read with `getJournals` and reconcile there: gross should equal the
+creditor side and the card charge exactly.
+
+A long verification loop can also outlive the access token. `mf_api.get_access_token()` refreshes
+on demand, so call it per request rather than hoisting the token into a variable at the top;
+otherwise the run starts returning HTTP 401 partway through and every remaining row reads as a
+failure. If a check flips from OK to failing mid-list, suspect the token before suspecting the data.
+
 **Find the existing card journal before creating anything.** A connected business card
 already auto-journalizes each charge (借 expense / 貸 未払金). Search 仕訳帳 by **amount**
 (値 filter) — the card descriptor (摘要) for one vendor changes over time (Anthropic =
@@ -306,15 +331,43 @@ that basis; a manual journal was then created for 神楽坂前田 ¥73,800 and *
 against the existing AI-OCR journal No.7 — it had to be deleted through the UI.) Before
 creating any manual journal, query `getJournals` for the same period and match by amount.
 
-**Excluded feed rows cannot be journalized through the API.** A transaction with
-`journalizing_status: excluded` (対象外) makes `postTransactionJournalize` fail with
-"The specified transaction has already been journalized". Clearing 対象外 is UI-only. The
-workaround is a manual `postJournals` entry — but record in its `memo` that the feed row
-is still 対象外, because clearing it later would double-count.
+**Excluded feed rows cannot be journalized through the API — but clearing 対象外 is easy, so
+prefer that over a manual journal.** A transaction with `journalizing_status: excluded`
+(対象外) makes `postTransactionJournalize` fail with "The specified transaction has already
+been journalized". The clearing is UI-only, and the path is short: データ連携 → 登録済一覧 →
+the card's 明細一覧「閲覧」 → narrow with the 内容 box (the card descriptor, e.g. `GOアプリ`) →
+the row's 「対象外を解除」. The status flips to 未入力 immediately, with no confirmation dialog,
+and `postTransactionJournalize` then works normally. Re-fetch the transaction afterwards to
+pick up the new id/status before journalizing.
+
+Reach for a manual `postJournals` entry only when the row must stay 対象外 — and then record
+in its `memo` that the feed row is still excluded, because clearing it later would
+double-count. Going through the UI avoids that trap entirely, which is why it is the better
+default.
+
+Before clearing anything, ask what the exclusion meant. 対象外 usually records a deliberate
+"this was private" decision, so silently un-excluding rows re-books personal spending as
+business expense. Match the rows you hold evidence for, show the user the list, and clear
+only the ones they confirm. (Real case: eight GO taxi receipts arrived in one batch; three
+of the matching feed rows were 対象外, and only the two the user confirmed as business were
+cleared — the third had no receipt and stayed excluded.)
 
 **`putJournals` preserves `voucher_file_ids`.** The parameter doesn't exist on the schema,
 yet attached evidence survives an update (verified). So fixing an existing AI-OCR journal's
 貸方 or 税区分 through the API is safe and does not detach its receipt.
+
+**But `putJournals` replaces the branch wholesale — anything you omit is erased.** Evidence
+survives; everything inside `branches` does not. Leave out `sub_account_id` and the 補助科目
+is silently cleared, and the same goes for `department_id`, `trade_partner_code`, and the
+`remark`. Read the journal first and carry every populated field into the request, changing
+only what you mean to change.
+
+Losing a 補助科目 is worse than it looks, because other MF features key off it. 家事按分
+(決算・申告 → 家事按分) is configured per 勘定科目＋補助科目, so stripping 補助科目「家賃」 from
+twelve rent journals dropped its 仕訳登録済の経費合計額 to zero — the apportionment silently had
+nothing left to apportion. The journals themselves looked perfectly fine in 仕訳帳; only the
+家事按分 screen showed the damage. After any `putJournals` sweep that touches an account with
+補助科目, re-read one of the updated journals and confirm the 補助科目 is still there.
 
 **AI-OCR journals have two recurring defects worth checking against the receipt:**
 - *貸方 booked as 現金 even when the receipt says クレジット.* Leaves 現金 balance wrong.
@@ -347,6 +400,21 @@ filter hides already-attached files (prevents double-assignment) but also hides 
 mis-attached one, so always verify each journal's attached receipt matches on date+amount
 (a July-7 receipt once sat on the July-8 journal while July-7 was empty).
 
+That dialog drops clicks, so treat the screen as unreliable and the API as the record.
+The row checkbox often ignores the first click after the list renders — the counter stays
+"0件を選択中" and 添付 is inert, so the batch silently does nothing. Read the counter before
+clicking 添付 and only proceed once it says 1件; clicking the checkbox twice "to be sure"
+just toggles it back off. The same applies to the 取引No search and the タブ切り替え, which
+miss whenever the window has been resized since the last screenshot — take a fresh
+screenshot and re-derive coordinates rather than reusing them across page loads.
+
+Then confirm the whole batch through `getJournals` at the end: each journal should hold
+exactly one `voucher_file_ids` entry, resolve that id to its name via `GET /v1/files/{id}`
+on the Box API (returns the file's metadata including `file_name`), and check that no id
+appears on two journals. In one 8-journal run the UI reported success for all of them and
+one had in fact not attached; in another, 15 Box deletions showed a success toast and only
+7 had actually happened. Both were caught only by the API pass.
+
 **Deleting a journal** takes effect immediately — 仕訳帳 → the row's ⋮ → 削除 removes it with
 no confirmation dialog at all. Earlier versions of this skill claimed a native `confirm()`
 appeared and told you to pre-empt it by injecting `window.confirm = () => true`; that is
@@ -370,6 +438,92 @@ how the book already records sales: this user's bank feed auto-posts 借 普通�
 at receipt, so a manual 売掛金 accrual would double-count at payment. Match the book's
 existing sales account name (here **売上金**, not 売上高).
 
+## Vendors whose receipts never arrive as an attachment
+
+This skill only sees what Mail holds as an attachment. A vendor that publishes invoices on its
+own billing page is therefore invisible to it, and nothing announces the gap — its journals
+just accumulate with no 証憑, month after month, while every scan reports "no new candidates".
+Subscription software is the usual shape (the charge recurs, so the hole grows), but the same
+is true of anything billed through a web account.
+
+### Find the gap instead of waiting to notice it
+
+Ask the ledger, not your memory of which vendors are troublesome. Pull the year's journals,
+keep the ones where `voucher_file_ids` is empty, and group them by vendor: a vendor appearing
+repeatedly with no evidence is almost certainly dashboard-only. Cross-check by asking Mail
+whether that sender has *ever* sent an attachment — if every message from them has zero
+attachments, no amount of re-scanning will help, and the answer is to go to their website.
+
+Run this sweep at the end of a session, not just when someone asks. It is the only thing that
+turns a silent structural gap into a finite to-do list.
+
+### Look for the file before deciding it must be fetched
+
+"Cannot be collected" has been wrong every time so far — the file already existed somewhere.
+Check, in this order:
+
+1. **Box**, by vendor substring (`list-box --name <vendor>`). A previous run may have put it
+   there by a route the state file never recorded, and the substring search finds it whatever
+   naming convention that run used.
+2. **`~/.local/state/mail2mf/`** — sibling directories hold files pulled from outside Mail,
+   each with a JSON manifest recording drive/vendor id, md5, and the resulting Box file id.
+3. **`~/Downloads`**, for a ZIP or PDF a previous session or the user already fetched.
+
+### Fetching from a billing dashboard
+
+Open the vendor's billing page in the browser and look for a **bulk export before clicking
+anything per-month** — "all invoices", "download all", a date-range export. One click that
+returns a ZIP of everything beats N clicks, covers months you haven't reconciled yet, and
+usually ships a `manifest.csv` (date / invoice id / amount) that saves opening each PDF.
+
+Two things reliably go wrong:
+
+- **The invoice number is often only inside the PDF**, not in the filename, while the ledger
+  and your Box naming want it. Extract it with `pdftotext -layout <pdf> - | grep -oE '<pattern>'`
+  after unzipping, rather than trusting the download's filename.
+- **Many SaaS bill through Stripe**, so per-invoice "View" links lead to a Stripe hosted
+  invoice page. Do not try to derive the PDF URL from it — appending `/pdf` returns the
+  single-page-app shell (HTTP 200, ~745 bytes of HTML), and the real link is generated by
+  JavaScript behind the Download button. Use the vendor's own bulk export instead.
+
+**Check whether the download actually landed before concluding it was blocked.** This is worth
+its own step because getting it wrong costs the user a pointless manual task. Do not judge by
+`ls`/`find` output alone (a shell wrapper may mangle it) and do not assume which browser is in
+use — list by modification time with Python, and if nothing appears, read the browser's own
+download history rather than guessing:
+
+```bash
+python3 -c "import os,glob,datetime;[print(datetime.datetime.fromtimestamp(os.path.getmtime(p)).strftime('%m-%d %H:%M'), os.path.getsize(p), os.path.basename(p)) for p in sorted(glob.glob(os.path.expanduser('~/Downloads/*')), key=os.path.getmtime, reverse=True)[:5]]"
+```
+
+The history lives in each Chromium profile's `History` SQLite DB (`downloads` table:
+`target_path`, `state`, `interrupt_reason`) under `~/Library/Application Support/` — check
+every browser there (Chrome, Brave, Edge, Arc, …), not just the one you assume is running.
+A profile showing no downloads for months means the user browses in a different one. Also give
+a large export time to finish: a multi-megabyte ZIP is generated server-side, so a check a few
+seconds after the click can legitimately find nothing.
+
+If the domain is blocked by browser policy, or login is required in a way you should not drive,
+hand that one vendor back to the user with the exact page and what to download — and keep
+going with the rest rather than stalling the whole job.
+
+### When the file genuinely is not available yet
+
+Create the journal from the feed anyway so the ledger is complete, and say in the `memo` where
+the evidence has to come from. An unevidenced journal you flagged is recoverable; a charge
+nobody journalized is the one that gets lost. Report it as an open item with the vendor, the
+amount, and the page to fetch it from.
+
+### Known instances
+
+Kept as data, not as rules — the procedure above is what generalizes. Add to this list when a
+new vendor turns out to be dashboard-only.
+
+| Vendor | Where the invoices live | Notes |
+|---|---|---|
+| Cursor (Anysphere) | cursor.com → Billing & Invoices → Download → **All invoices** | ZIP of every invoice + `manifest.csv`; invoice no. `SCB7FYAO-00NN` only inside the PDF; 適格請求書ではない（登録番号の印字なし） |
+| OpenAI | platform.openai.com → billing history | The browser extension refuses this domain on policy, so the user has to download it. Note that a ChatGPT plan bought through Google Play is billed by Google, not OpenAI — a separate `OPENAI*` charge is a different purchase with its own receipt |
+
 ## Notes
 
 - Runtime state: `~/.local/state/mail2mf/state.json`
@@ -377,5 +531,10 @@ existing sales account name (here **売上金**, not 売上高).
   evidence set.
 - Secrets stay in the Keychain (`mail2mf-mfc`). Never display or store tokens or the
   client_secret.
-- There is no delete operation for Box (upload only). If something is uploaded by
-  mistake, the user removes it in the MF Box UI.
+- Box has no delete API — `DELETE /v1/files/{id}` returns 404 while `GET` on the same path
+  returns 200, so the endpoint is read/upload only. Deleting is UI work: クラウドBox → the
+  file's 詳細 → the trash icon at the top right. It goes straight to ゴミ箱 with no
+  confirmation dialog (recoverable from there), the file list offers no bulk selection, and
+  navigating to `box.moneyforward.com/files/<file_id>` jumps to a specific file. As with
+  attaching, the first click after page load often registers as hover only, so verify each
+  deletion with `list-box --name` rather than trusting the success toast.
