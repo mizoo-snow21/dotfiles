@@ -1,6 +1,6 @@
 ---
 name: cursor-delegate
-description: Delegate implementation tasks to Cursor CLI (Composer 2.5 Fast) in headless mode. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
+description: Delegate implementation tasks to Cursor CLI in headless mode, routing to Composer 2.5 Fast or Grok 4.6 Fast by difficulty. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
 ---
 
 # Cursor Delegate
@@ -133,7 +133,10 @@ stdlib / 既存依存優先。意図的な簡略化には `ponytail:` コメン�
 ### 3. Run Cursor
 
 ```bash
-# Mint the session id FIRST — every review-fix round needs it (see Session management)
+# Route by difficulty FIRST (see Model routing), then mint the session id —
+# every review-fix round needs both.
+MODEL=composer-2.5-fast            # low–medium
+# MODEL=cursor-grok-4.6-high-fast  # high: concurrency, state refactors, shared components, re-dispatch
 CHAT_ID=$(cursor agent create-chat)
 
 # Prompt goes through a QUOTED heredoc ('EOF', not EOF) — pasted constraints and
@@ -143,7 +146,7 @@ CHAT_ID=$(cursor agent create-chat)
 # text yourself before dispatching.
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model composer-2.5-fast \
+  --model "$MODEL" \
   --resume "$CHAT_ID" \
   "$(cat <<'EOF'
 ...prompt body (Task / Background / Target files / Test requirements /
@@ -166,7 +169,7 @@ Redirect to a file and read what you need from it:
 
 ```bash
 LOG=<scratchpad>/cursor-<task>.log
-cursor agent -p --trust --workspace "<project-dir>" --model composer-2.5-fast --resume "$CHAT_ID" \
+cursor agent -p --trust --workspace "<project-dir>" --model "$MODEL" --resume "$CHAT_ID" \
   "$(cat <<'EOF'
 ...prompt body...
 EOF
@@ -193,20 +196,31 @@ To make the check mechanical, require a fixed shape in the prompt:
 
 The same rule applies to the codex fallback in 3b.
 
-- **Every dispatch uses `--model composer-2.5-fast`** — first implementation and every review-fix round alike (user directive, 2026-08-20). There is no per-round split and no escalation tier; this is the only sanctioned Cursor model
+- **Pick the model by difficulty** (user directive, 2026-08-23, replacing the 2026-08-20 "`composer-2.5-fast` only" rule). See **Model routing** below. Decide once per task and keep the same model for that task's review-fix rounds unless the findings themselves turn out to be the hard kind
 - Review-fix rounds add `--resume <chatId>`, using the chat id recorded when the task was dispatched — not `--continue` (see Session management)
 - Verify the exact id with `cursor agent models` before scripting it — ids change between Cursor releases and a wrong `--model` silently falls back
 - Do NOT use `--yolo`. Use default approval-based execution
 
+#### Model routing
+
+Two sanctioned models. Both verified present in `cursor agent models`.
+
+| Difficulty | `--model` | What lands here |
+| --- | --- | --- |
+| Low–medium | `composer-2.5-fast` | Mechanical edits, adding a field, straightforward test additions, single-file changes whose blast radius is obvious, formatting, constant swaps |
+| High | `cursor-grok-4.6-high-fast` | Concurrency and race conditions, state-management refactors, contract changes spanning files, shared-component changes, review findings that need a judgement call, **any re-implementation after a task was sent back** |
+
+**Raising the tier does not replace verification.** Whatever the model, when a task adds a test, inject the bug it claims to catch and confirm it goes RED yourself. Ask for the actual passed/failed counts in the report.
+
 #### Model traps
 
-- **Any `cursor-grok-*` id — or a bare `composer-2.5` — found in an old prompt, script, or plan is stale.** Replace it with `composer-2.5-fast`.
-- **Do not swap the model when a task looks hard.** There is no escalation tier and no "be more careful" knob. If a task needs more than Composer delivers, split the task or ask the user — never pick a different model on your own.
+- **A bare `composer-2.5` (no `-fast`) in an old prompt or script is stale.** Replace it with `composer-2.5-fast`. `cursor-grok-*` ids are NO LONGER stale — see Model routing.
+- **Route by difficulty before dispatch, not mid-task.** Escalating because a task "feels hard" halfway through wastes the session's context. Judge from the task brief and the blast radius you already measured.
 - **Never pass a Codex model** (`gpt-5.3-codex-high` etc.) as a Cursor `--model`. Codex is the reviewer side. The one place codex appears as an implementer is the quota fallback below, where it runs as its own CLI, not as a Cursor model.
 
 ### 3b. Quota fallback: implement via the codex CLI when Cursor's quota is gone
 
-Every Cursor model draws on the **same** plan quota, so when `composer-2.5-fast` reports `You're out of usage` there is nothing to switch to. (`--model auto` may still answer, but once implementation has moved to codex, that is no longer the sanctioned path.)
+Every Cursor model draws on the **same** plan quota, so on `You're out of usage` switching tiers does not help. Go to codex.
 
 ```bash
 # Same quoted-heredoc rule as Cursor dispatch — the prompt carries the resolved
@@ -227,7 +241,7 @@ EOF
 
 - `< /dev/null` on **every** invocation — without it a backgrounded codex hangs forever on the stdin pipe.
 - **Nothing else about the flow changes**: the TDD read-first path instruction still goes in the prompt, one task is still one fresh session, review fixes still go back to the same implementer session, and any impact / change-detection gates still apply.
-- Return to Cursor (`composer-2.5-fast`) as soon as the quota resets (monthly cycle).
+- Return to Cursor as soon as the quota resets (monthly cycle), routing by difficulty as usual.
 
 ### 4. Claude Code verifies
 
@@ -269,13 +283,14 @@ Follow the project's review workflow (e.g., spec review + quality review via sub
 **Mint the chat id yourself before dispatching, and address every follow-up to that id.**
 
 ```bash
-# 1. Create the session up front — prints a UUID and nothing else
+# 1. Route by difficulty, then create the session up front (prints a UUID and nothing else)
+MODEL=composer-2.5-fast   # or cursor-grok-4.6-high-fast — see Model routing
 CHAT_ID=$(cursor agent create-chat)
 
 # 2. First implementation into that session (quoted heredoc — same rule as step 3)
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model composer-2.5-fast \
+  --model "$MODEL" \
   --resume "$CHAT_ID" \
   "$(cat <<'EOF'
 ...prompt body...
@@ -286,7 +301,7 @@ EOF
 # NOTE: resuming does NOT inherit the session model (CLI default wins) — always pass --model explicitly
 cursor agent -p --trust \
   --workspace "<project-dir>" \
-  --model composer-2.5-fast \
+  --model "$MODEL" \
   --resume "$CHAT_ID" \
   "$(cat <<'EOF'
 ...findings to fix + reference to the original task...
@@ -314,6 +329,6 @@ Why mint it instead of recovering it later: `cursor agent ls` is an **interactiv
 | `-p` | Headless output (required for CLI execution) |
 | `--trust` | Trust workspace (required for headless mode) |
 | `--workspace <path>` | Working directory |
-| `--model composer-2.5-fast` | Model selection — fixed, every round |
+| `--model <id>` | `composer-2.5-fast` or `cursor-grok-4.6-high-fast` — pick by difficulty (see Model routing) |
 | `--continue` | Continue previous session |
 | `--resume <chatId>` | Resume specific session |
