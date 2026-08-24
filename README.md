@@ -66,8 +66,22 @@ cd ~/dotfiles
 - mise configuration for managing multiple language versions
 - Homebrew package management setup
 - Cloud CLIs managed by mise: AWS CLI, Azure CLI, and Google Cloud CLI
-- Language/runtime tools managed by mise: Python, Node.js, Go, and uv
+- Language/runtime tools managed by mise: Python, Node.js, Go, uv, and pnpm
+- Node-based CLIs are declared in mise as well (`"npm:<package>" = "latest"` in `.config/mise/config.toml`): codex, gws, gitnexus, portless, pyright, claude-code-monitor. Do not use a bare `npm install -g` — it disappears on the next Node upgrade and shadows the mise-managed copy on PATH
+- PATH order: `~/.local/bin` is added *before* mise activates, so mise-managed tools win on name collisions (e.g. an installer dropping its own `node` into `~/.local/bin`) and project-level `mise.toml` pins apply as expected
 - Docker Desktop managed by Homebrew cask
+
+### portless (named `*.localhost` dev URLs)
+
+`portless` (installed via mise) gives every dev server a stable `https://<app>.localhost` URL — and `https://<worktree>.<project>.localhost` inside a git worktree — instead of a port number, so parallel worktrees never fight over port 3000. Start apps with `portless run pnpm dev`.
+
+One-time step on a new machine. It needs sudo, so run it in a real terminal (not through an agent):
+
+```bash
+PORTLESS_SYNC_HOSTS=0 portless service install   # root launchd service on 443, no /etc/hosts edits
+```
+
+Re-run it after `mise up` changes node or portless — the launchd plist bakes their absolute paths. `portless service status` shows whether it is healthy.
 
 ### Cursor IDE Configuration
 - IDE settings and preferences
