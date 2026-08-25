@@ -373,6 +373,7 @@ Ask: does this component block access to the rest of the product until completed
 
 ### Reuse existing UI elements as feedback carriers instead of adding new ones `BHV-051`
 Repurpose standard interface parts already on screen — scrollbars, cursors, progress bars, tooltips, hover states — as feedback carriers rather than adding new UI elements, conveying more information without growing the interface's surface area.
+When: avoid where the repurposed meaning would be non-obvious or would conflict with the element's primary role.
 Trade-off: discoverability of repurposed meaning vs. avoiding visual clutter.
 Ask: can an existing on-screen element already carry this feedback instead of adding a new one?
 (MI ch4)

@@ -96,7 +96,7 @@ Accept text in whatever natural notation the user types (dates, names, addresses
 
 ### Validate inline, and explain errors in place, specifically, and without erasing data
 Prevent errors before they happen where possible (dropdowns over free text for limited sets; hints/prompts/forgiving-format/autocomplete/defaults for free text; business-logic constraints built into controls so invalid combinations can't be selected). Validate each field as soon as it's completed, not only at submission.
-- Do: prefer client-side validation, updating the loaded page rather than reloading; when only server-side validation is possible, name exactly which field(s) failed and suggest the likely fix instead of a vague "there was an input error"; show messages on the same page (a top summary plus, where space allows, a message beside the field), never a modal or separate results page; mark required fields with the word "required," not only a symbol; pair color with a non-color cue; write plain, specific, polite error text.
+- Do: prefer client-side validation, updating the loaded page rather than reloading; when only server-side validation is possible, name exactly which field(s) failed and suggest the likely fix instead of a vague "there was an input error"; show messages on the same page (a top summary plus, where space allows, a message beside the field), never a modal or separate results page; mark required fields with the word "required," not only a symbol; pair color with a non-color cue (general rule: typography-color-depth.md → Never convey meaning through color/motion alone); write plain, specific, polite error text.
 - Avoid: waiting for full-form submission to reveal errors; modal/separate-page error display; vague generic errors with no field indication; symbol-only required markers; color-only error indication.
 - Ask: "Is this error caught as the user finishes the field, or only after submitting the whole form? Does the error name the specific field and why?"
 ⟨di4-022, uxp1-038, uxp1-039⟩
@@ -141,7 +141,7 @@ Treat published minimums (~44x44pt / 48dp / 44px CSS, ~1cm square) as a floor, n
 ### Space, group, and differentiate targets via Fitts's Law; place completion actions near their trigger
 Movement time to a target shrinks as size grows and distance shrinks (Fitts's Law) — keep related/sequential targets close together, and don't place a small target far from a preceding click point and expect reliable accuracy.
 - Do: adequate spacing between unrelated adjacent targets to avoid accidental taps; when adjacent controls have opposite/high-consequence outcomes (approve/reject, delete/cancel), give them distinct visual treatment in addition to spacing — never rely on spacing alone; position a task-completing action (e.g. submit) adjacent to the last input it acts on.
-- Avoid: placing accept/reject or destructive/safe actions immediately adjacent with identical styling.
+- Avoid: placing accept/reject or destructive/safe actions immediately adjacent with identical styling. (Consolidated destructive-action block: interaction-feedback.md.)
 - Ask: "Is this target big enough and close enough to where the user's pointer already is?"
 ⟨laws1-009, laws1-012, psy1-039, uxp1-022⟩
 

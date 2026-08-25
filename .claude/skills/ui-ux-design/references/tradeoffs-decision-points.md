@@ -130,6 +130,16 @@ Contents: Choice, disclosure & visibility (cog-d01/02, forms-d01, nav-d01, act-d
 - **Decide by asking:** "Does adding this shortcut or cross-link still leave the underlying hierarchy perceivable, or does it let users bypass structure entirely from anywhere?" / "Have global, local, and contextual navigation been reviewed together as one system, or only each in isolation?" / "Would a cheaper, static option (e.g. a footer sitemap) achieve enough of the benefit without a dynamic mega menu's added complexity?"
 ⟨ia2-046, ia2-047, ia2-048, ia3-033, ia2-053, di2-013, di2-014⟩
 
+### nav-d03 — More, simpler steps (lower per-step cognitive load) vs. fewer page jumps (lower re-orientation cost)
+- **A:** A. Break a complex decision into several simple, logical steps — cognitive load costs more than motor load, and users tolerate clicks that each deliver logical progress.
+- **B:** B. Keep the ~80% most common task on one page with no context switch — every page/window jump forces re-orientation and compounds load time; shrink or progressively disclose in place before moving content to another page.
+- **Favor A when:** each collapsed-together step would demand noticeably more thinking; the decision has real branching; users are unfamiliar with the domain.
+- **Favor B when:** the task is frequent/habitual for its user; the "steps" are really one decision split cosmetically; in-place disclosure (tabs, accordion, inline expansion) can absorb the complexity without a jump.
+- **Risk of A:** each extra jump re-orients and slows a task the user runs daily; wizard overhead on what one short form could do.
+- **Risk of B:** one dense page raises per-step cognitive load exactly where A warns; primary flow buried in options.
+- **Decide by asking:** "Is the split lowering thinking per step, or just adding jumps?" / "Can in-place disclosure deliver A's simplicity without B's jump cost?" / "How often does THIS user run this task?"
+⟨psy1-037, psy1-038, di2-001⟩
+
 ## Visual: density, depth, type
 
 ### vh-d02 — Generous whitespace as default vs. deliberate information density

@@ -267,6 +267,7 @@ Hiding primary nav behind a hamburger roughly halves findability and increases c
 ### Treat every page/window jump as a real cost
 Design the ~80% most common task to complete on one page, no context switch — each jump forces re-orientation and compounds load time. Shrink a control (fewer options, shorter labels, icons) before moving it to another page; use progressive disclosure (tabs, accordion) instead.
 - Exception: burying the rare ~20% of tasks an extra jump away is fine if it keeps the primary flow simple — usability-test when unsure.
+- ⚖ Tension: pulls against preferring more, simpler steps to cut cognitive load (cognition-mental-models.md) → nav-d03
 ⟨di2-001⟩
 
 ### Mark every decision point with a clear sign

@@ -95,10 +95,11 @@ When a screen updates and only part of it changes, don't assume users will notic
 - Ask: "If this element changes without a full reload, is there a cue strong enough to guarantee the user notices?"
 ⟨psy1-012, laws1-053⟩
 
-### Place important content ~30% inset from the top corner, not the literal edge
+### Place important content inset from the corner dead zones (the ~30% figure is an intuition, not pixel math)
 Position the most important information roughly 30% in from the top and left (or right, for RTL) edge — users learn to skip literal edges (logos, whitespace, nav chrome) and start scanning from a point inset from the corner, following their normal reading-direction scan path.
 - Avoid: placing critical content at the literal screen edge and expecting it found quickly.
 - Ask: "Is the most important content in the true starting zone, or stranded at a literal edge?"
+- Context: this is a scan-start heuristic for content pages, not a fixed offset — app shells with persistent chrome relocate the "starting zone" to the content region's top-left, not 30% into the viewport.
 ⟨psy1-008⟩
 
 ### Give interactive elements affordances that match their real behavior
@@ -114,6 +115,7 @@ Minimalism cuts clutter effectively, but not when it strips the signifiers that 
 - Avoid: stripping signifiers until users can't tell what's tappable; applying a signifier to only some interactive elements.
 - Trade-off: visual minimalism vs. discoverability of what's interactive.
 - Ask: "Are visual signifiers applied consistently to every interactive element, or only some?"
+- Full icon-labeling rule: typography-color-depth.md → Icon + text relationship.
 ⟨uxp1-094⟩
 
 ### Quick reference
@@ -198,4 +200,4 @@ Rank every actionable element on a page into primary (usually exactly one), seco
 ⟨rui1-024⟩
 
 ### Quick reference
-- Don't automatically give a destructive/high-severity action big, red, bold styling by default — style it per its actual hierarchy rank on the current page (secondary/tertiary if not the primary action); reserve strong warning styling, and unequal visual weight vs. the safe option, for a confirmation step where the destructive action becomes primary — equal weight between destructive and safe choices in a confirmation dialog raises the odds of an unintended irreversible pick. ⟨laws1-054, rui1-025⟩
+- Don't automatically give a destructive/high-severity action big, red, bold styling by default — style it per its actual hierarchy rank on the current page (secondary/tertiary if not the primary action); reserve strong warning styling, and unequal visual weight vs. the safe option, for a confirmation step where the destructive action becomes primary — equal weight between destructive and safe choices in a confirmation dialog raises the odds of an unintended irreversible pick. Consolidated destructive-action block: interaction-feedback.md. ⟨laws1-054, rui1-025⟩

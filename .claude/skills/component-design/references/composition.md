@@ -387,16 +387,8 @@ components.
 (MI ch6)
 
 ### Seams between composed components should be invisible; check for reuse before adding a new one `CMP-023`
-Before starting a new component's design within a larger composed feature, map how the needed
-components connect/hand off to each other, and check whether an existing component already covers
-that handoff rather than building a redundant or conflicting one. The handoff "seams" between
-composed components should ideally be invisible to the user — the whole feature should feel like
-one coordinated thing, not a collection of disconnected fragments.
-Do: map how components hand off to each other before building a new feature; check for
-reuse/conflict against existing components before adding a new one.
-Ask: would the user ever perceive the handoff between these two components as a seam? Does an
-existing component already serve this handoff, making a new one redundant or conflicting?
-(MI ch6)
+→ Canonical: `BND-037` in boundaries.md (map handoffs before building; seams invisible to the
+user; check existing components for reuse/conflict first). (MI ch2, ch6)
 
 ### Model multi-step flows as routed screens with a progress indicator, not stacked dialogs `CMP-015`
 For a multi-step user flow (e.g. checkout), route the user between real screens according to
@@ -415,12 +407,6 @@ weaker assistive-technology support than a visually-hidden text fallback at time
 (IC ch12)
 
 ### Reuse existing UI elements as feedback/state carriers instead of adding new ones `CMP-024`
-Repurpose standard interface parts already on screen — scrollbars, cursors, progress bars,
-tooltips, hover states — to carry additional feedback/state, instead of adding a new dedicated UI
-element for it. Repurposing existing, already-understood UI elements communicates state without
-growing the interface's surface area or adding new things for the user to learn.
-When: avoid where the repurposed meaning would be non-obvious or conflict with the element's
-primary role.
-Trade-off: discoverability of a repurposed meaning vs. avoiding visual clutter from a new
-dedicated element.
-(MI ch4)
+→ Canonical: `BHV-051` in behavior.md (repurpose scrollbars/cursors/progress bars/tooltips/hover
+states as carriers; avoid where the repurposed meaning would be non-obvious or conflict with the
+element's primary role). (MI ch4)

@@ -104,7 +104,7 @@ Ask: How much on-screen space can this control occupy relative to competing cont
 ### Seams between composed components should be invisible to the user `BND-037`
 Before starting a new component, map how every component needed for a feature connects and hands off to the others (a "microinteraction map"). The handoff seams between components should ideally be invisible to the user — the whole feature should feel like one coordinated thing, not disconnected fragments — and this mapping step should also surface whether an existing component already covers the handoff, avoiding a redundant or conflicting new one.
 Do: map how components hand off to each other before building a new feature; check for reuse or conflict against existing components before adding a new one.
-Ask: Would the user ever perceive the handoff between these two components as a seam? Does an existing component already serve this handoff, making a new one redundant or conflicting? (MI ch2)
+Ask: Would the user ever perceive the handoff between these two components as a seam? Does an existing component already serve this handoff, making a new one redundant or conflicting? (MI ch2, ch6)
 
 ## Shared vs Local & Promotion
 

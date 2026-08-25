@@ -156,6 +156,26 @@ Trade-off: technical precision vs. perceived/felt consistency.
 
 ## Modeling states
 
+### Worked example — a state table is the deliverable's floor, not an extra `VST-EX1`
+V1 evals showed state modeling described in adjectives ("handles loading gracefully") scores at
+baseline; typed shapes with owners score above it. For every stateful component, write the state
+model in this shape before prose:
+
+| state axis | concrete shape (values, not adjectives) | single owner | transitions (trigger → result) |
+|---|---|---|---|
+| content | `idle \| loading \| loaded(rows: Row[]) \| empty \| error(msg, retryable)` | ShipmentList | `mount → loading`; `fetch ok → loaded/empty (rows.length)`; `fetch fail → error` |
+| selection | `Set<RowId>` (possibly empty; no "select-all" boolean — derive it) | ShipmentList | `row checkbox → toggle id`; `header checkbox → all visible ids / clear` |
+| sort | `{col: ColId, dir: asc \| desc} \| null` | ShipmentList | `header click → same col: flip dir; new col: asc` |
+| row expansion | `RowId \| null` (exclusive) — a second axis, never mixed into `content` | ShipmentList | `row click → toggle; opening one closes the previous` |
+
+Rules the table enforces mechanically: one owner per axis (derived displays read from it, never
+duplicate it — VST-005); every axis lists ALL its change paths (VST-006); waiting/active/updated
+each designed (VST-013); no axis smuggled into another ("empty" is a content value, not a boolean
+beside it). If two sections of your document would fill this table differently, that IS the
+defect the final critique's state sweep exists to catch.
+(worked example, V2 — instantiates VST-005/006/013 and the MI ch3 rules-define-transitions model;
+tabled format is skill-derived, the rules it enforces are book-derived)
+
 ### Attach a component's state indicator to the control that changes it `VST-004`
 A component's current state must be exposed on the element the user actually operates to change
 it, not on the separate target/content being changed, and not in a distant or separately-located
@@ -203,7 +223,10 @@ Interaction states (hover, focus, selected, disabled, etc.) are usually document
 individually, which risks inconsistent treatment across component types — does hover on a
 secondary link, icon button, ghost button, and tab all change the same way? Define
 interaction-state rules once at the system level and reference them from each component, rather
-than letting each component invent its own ad hoc treatment.
+than letting each component invent its own ad hoc treatment. This applies where the underlying
+interaction genuinely is the same kind of state change — a different kind of control
+legitimately gets a different treatment (see BND-039: over-prioritizing consistency produces a
+generic, inflexible system).
 Do: define interaction-state rules once at the system level and reference them from each component.
 Ask: is this component's hover/focus/selected/disabled treatment consistent with other interactive
 components, or ad hoc?

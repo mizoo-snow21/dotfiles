@@ -642,6 +642,28 @@ broader native support gap, mitigated by polyfill.
 Do: prefer the inert attribute (with polyfill) applied to all direct siblings outside the dialog.
 (IC ch12)
 
+### Stacked/nested overlays: ref-count shared side effects, never toggle them `AXK-046`
+When dialogs nest (a Discard-Confirm opened above an editor dialog), any side effect they share —
+background scroll-lock, inert on the page, a dimming overlay — must be reference-counted, not
+toggled: closing the inner dialog must decrement, and the effect is released only when the count
+reaches zero. A boolean toggle silently releases the background scroll (or reactivates the page)
+while the outer dialog is still open — a defect invisible in single-dialog testing and common in
+practice. Also restate the focus contract per layer: closing the inner dialog returns focus to
+the control inside the outer dialog that opened it, not to the page.
+Ask: if two overlays are ever open at once, which shared effects are counted vs. toggled? Where
+does focus land when only the inner one closes?
+(product-derived V2 — WAI-ARIA APG dialog pattern; absent from the V1 book corpus, added after a
+baseline-arm catch in the V1 eval)
+
+### role="alertdialog" for interruptions that demand a response; role="dialog" otherwise `AXK-047`
+A confirmation that interrupts a task to demand an immediate response (discard changes? delete?)
+is an alertdialog: assistive technologies treat it more urgently, and it must have an accessible
+name and describedby pointing at the message. A dialog that hosts content or a form the user
+works in at their own pace stays role="dialog". Using dialog for both flattens the urgency
+distinction the roles exist to carry.
+Ask: does this overlay interrupt with a question that must be answered before anything else — or
+host work? (product-derived V2 — WAI-ARIA APG alertdialog pattern; absent from the V1 book corpus)
+
 ### Bound a custom dialog's content to the viewport `AXK-040`
 A custom dialog's content container should be given a max-height with overflow-y: auto (and a
 readable max-width, e.g. ~50 characters) so the dialog can never grow larger than the viewport and

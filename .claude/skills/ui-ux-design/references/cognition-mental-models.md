@@ -32,6 +32,7 @@ Cognitive load (thinking/remembering) costs more than visual load (looking/searc
 - Exception: engagement-first products (games) may deliberately increase load for challenge/immersion.
 - Trade-off: cognitive vs. visual vs. motor load — reducing one often raises another.
 - Ask: "If I collapsed these steps to cut clicks, would each remaining step require noticeably more thinking?"
+- ⚖ Tension: pulls against treating every page jump as a real cost (ia-navigation-content.md) → nav-d03
 ⟨psy1-037, psy1-038⟩
 
 ### Ask for the minimum information necessary in forms
@@ -106,6 +107,7 @@ Let users recognize a correct value from a presented set (dropdowns, autocomplet
 ### Pair icons with text labels for important or ambiguous actions
 The same icon can mean different or contradictory things across products — there's no governing standard. Don't rely on an icon alone for consequential or non-universal actions; add a text label, especially in primary navigation.
 - Exception: icons with genuinely universal, unambiguous meaning may stand alone.
+- Full icon-labeling rule (localization, screen readers, mobile): typography-color-depth.md → Icon + text relationship.
 ⟨laws1-029⟩
 
 ### Never require remembering across screens — watch for note-taking as a warning sign

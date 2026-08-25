@@ -38,7 +38,7 @@ Don't use ornate, script, italic, or highly geometric (confusable e/c/d/o) faces
 ⟨di4-048, psy1-022⟩
 
 ### All-caps and letter-spacing
-Reserve all-caps for short headings or genuine urgency (e.g. confirming an irreversible delete) — never body text. Trust default letter-spacing except: tighten it for a wide-spacing face used as a headline; loosen it for all-caps (default spacing reads cramped without mixed-case cues).
+Reserve all-caps for short headings, compact table/section labels, or genuine urgency (e.g. confirming an irreversible delete) — never body text. Context: dense operational UIs use small all-caps column/section labels legitimately; long marketing or reading surfaces should avoid all-caps beyond a short eyebrow. Trust default letter-spacing except: tighten it for a wide-spacing face used as a headline; loosen it for all-caps (default spacing reads cramped without mixed-case cues).
 ⟨di4-048, psy1-018, rui1-052⟩
 
 ### Constrain line/paragraph length

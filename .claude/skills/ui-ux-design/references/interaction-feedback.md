@@ -159,9 +159,11 @@ Give waiting users something genuinely valuable to do, not obvious busywork — 
 Design controls so an erroneous state is literally impossible where feasible (Apple's reversible Lightning connector), not just caught after the fact. Correct input triggers zero extra messaging; reserve error messages for what the system can't handle, trying auto-recovery first (e.g. auto-widen a zero-result search) before a plain error. Don't aim for zero errors — scale prevention to that failure's actual cost; reserve maximum investment for high-consequence domains.
 ⟨mi1-057, mi1-058, psy2-051, mi1-059, psy2-050⟩
 
-### Confirmation dialogs don't reliably stop habituated destructive actions
-Don't rely on a confirmation dialog to stop a habituated destructive action — dismissing it becomes just as habituated and unconsciously bypassed as the original action. Prefer removing the risky default path entirely, or relying on strong undo.
-⟨di1-015⟩
+### Destructive actions — the consolidated decision block
+The three halves of destructive-action design live in three files; decide them together, here:
+1. **Guardrail choice:** don't rely on a confirmation dialog to stop a habituated destructive action — dismissing it becomes just as habituated and unconsciously bypassed. Prefer removing the risky default path entirely, or strong, real undo (a restore that actually works beats any dialog). Scale friction to irreversibility and cost: plain action → confirm → typed confirmation, in that order of escalation. ⟨di1-015⟩
+2. **Styling by rank, not by category:** don't auto-style destructive actions big/red/bold — style per hierarchy rank on this page; reserve strong warning styling for the confirmation step where the destructive action becomes primary, with UNEQUAL weight vs. the safe option (visual-hierarchy-layout.md quick reference). ⟨laws1-054, rui1-025⟩
+3. **Placement:** never place destructive and safe controls adjacent with identical styling — distinct treatment plus spacing (forms-input.md → Fitts's Law targets). ⟨laws1-009, laws1-012⟩
 
 ### Quick reference
 - Classify each usability-test error by outcome (positive: useful info even off-path; negative: blocked/undid/unrecoverable — prioritize these; neutral: no effect) and by type (commission: extra step; omission: skipped step; wrong-action: right procedure, wrong choice; motor-control: physical slip) — each type implies a different fix. ⟨psy2-058, psy2-059⟩
