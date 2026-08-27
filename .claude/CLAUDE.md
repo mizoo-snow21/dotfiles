@@ -26,15 +26,18 @@ If a skill is unregistered or broken and cannot be loaded, **do not substitute f
 | Assessing the blast radius of a change | `gitnexus-impact-analysis` |
 | **本番の多数レコードへ一括処理を仕掛ける**（再処理 / バックフィル / 一括再分類） | `bulk-production-ops` |
 | Closing out or handing over a session | `handover` |
-| 有力案が2つ以上あって机上では決め手がない（設計・UI・アルゴリズム） | `pstack:arena` |
-| **なぜこうなっているか**（設計判断の由来 / リグレッションの発端 / ポストモーテム） | `pstack:why` |
-| PR を green まで見届ける（CI 赤・レビューコメント対応を再プロンプトなしで） | `pstack:babysit` |
-| 長時間の自律実行 / ユーザーが席を外す間の作業（`/loop`・「寝てる間に」） | `pstack:show-me-your-work` |
+| Two or more credible options with no decisive argument on paper (design / UI / algorithm) | `pstack:arena` |
+| **Why is it built this way** (origin of a design decision / where a regression started / postmortem) | `pstack:why` |
+| Driving an open PR to green (red CI, review comments) without re-prompting | `pstack:babysit` |
+| Long autonomous runs / work the user steps away from (`/loop`, "while I sleep") | `pstack:show-me-your-work` |
+| Editing CLAUDE.md / AGENTS.md / any SKILL.md | `writing-for-agents` |
+| Stress-testing a settled plan round by round with codex, before `codex-review` | `grilling` |
 
 - **"I've been typing the same command all along" is NOT evidence the procedure hasn't changed.** When the *kind* of action changes (investigate → implement, view → create, edit → publish), re-consult this table. Same tool, different kind of action → a different skill applies.
 - Before creating anything that leaves the machine (GitHub issue, PR, comment, public document, external message), check the table **before typing the first command** — not after.
 - Example: you can run `gh issue view` / `comment` / `edit` all day, but `gh issue create` is a different kind of action — always load `github-issues`.
-- **pstack の SessionStart フックは意図的に無効化してある**（`scripts/install-claude-plugins.sh` が後処理で外す）。`pstack:poteto-mode` を非自明タスクの既定入り口にすると、この表と入り口が二重になり、実装の担い手（Cursor か poteto-agent か）とレビュー段数が食い違うため。表に無い `pstack:*`（`architect` / `figure-it-out` / `deslop` 等）はユーザーが名指ししたときや必要と判断したときに使ってよいが、**入り口は常にこの表**。プラグイン更新でフックが復活するので、更新後はスクリプトを再実行する
+- **pstack's SessionStart hook is disabled on purpose** (`scripts/install-claude-plugins.sh` renames it away after install). Making `pstack:poteto-mode` the default entry point for non-trivial tasks would give this table a second, competing entry point, and the two disagree on who writes the code (Cursor vs `poteto-agent`) and on how many review stages there are. `pstack:*` skills not listed above (`architect`, `figure-it-out`, `deslop`, …) are fine to use when the user names one or when you judge it useful, but **the entry point is always this table**. A plugin update restores the hook, so re-run the script after updating.
+- **`grilling` local delta: codex is the interviewer.** The skill as written interviews the user. Here codex generates the frontier — the questions whose prerequisites are already settled, each carrying its recommended answer — and you relay them with your own judgment attached. Drive the rounds with `codex exec` then `codex exec resume --last`, capturing every reply through `-o <file>` so nothing is truncated. **Decisions stay with the user**; routing a decision to codex breaks the skill's contract. If the frontier is still not empty after 3-4 rounds, the requirements aren't settled — go back to `superpowers:brainstorming` rather than buying more rounds.
 
 ## Code Intelligence Routing
 
@@ -86,7 +89,7 @@ blast radius is non-trivial.
 - **Trigger**: implementation plan / spec / todo documents — before showing to the user
 - **issue body / PR body は対象外** (user directive, 2026-08-22)。codex の利用上限が厳しいため、レビューの価値が最も高い文書に絞る。外部公開物の事実確認が要るときは Fable などの subagent に出す
 - **Procedure**: `Skill(codex-review)` (document review is covered by the skill)
-- **codex の上限に当たったときのフォールバックは `pstack:interrogate`**（4モデルの敵対的レビュー）。codex の代替であって追加ゲートではない — 両方は回さない
+- **When codex hits its usage limit, fall back to `pstack:interrogate`** (four models attacking the document). It replaces codex here, it is not an extra gate — never run both
 - **Local policy**: when an already-created issue / PR needs fixing, **edit in place**. The create → close → reopen churn destroys audit context — avoid it
 
 ### 4. Verification Before Done
@@ -153,7 +156,7 @@ blast radius is non-trivial.
 **Commands, flags, model ids, prompt structure, and the forbidden list all live in `Skill(cursor-delegate)`.** Below is only local policy the skill does not carry.
 
 - **Implementation always goes through Cursor** (on quota exhaustion, fall back to the codex CLI; procedure lives in the skill) — never let a Claude Code subagent write implementation code. Claude Code does planning, review, and investigation only
-  - **`pstack:arena` は例外ではない。** arena の N 個の候補は**捨てるプロトタイプ**であり、比較して設計を決めるための道具。勝った案は仕様として Cursor に渡し直す — arena が書いたコードをそのまま本番ブランチに載せない
+  - **`pstack:arena` is not an exception to this.** Its N candidates are **throwaway prototypes**, a tool for settling a design by comparison. Hand the winning design back to Cursor as a spec — never land arena's own code on the branch
 - **1 task = 1 fresh session** — never batch multiple tasks into one invocation
 - **Parallel Implementation Rule — independent tasks run in parallel, dependent ones stay ordered** (user directive, 2026-08-08). `superpowers:subagent-driven-development` lists "dispatch multiple implementation subagents in parallel" as a Red Flag, but its stated reason is conflicts — so **this local rule overrides it only where conflict is structurally impossible**. Dispatch in parallel only when ALL of the following hold:
   1. **Disjoint file sets** — declared per task in the plan, and the pre-dispatch impact analysis blast radii do not overlap either
