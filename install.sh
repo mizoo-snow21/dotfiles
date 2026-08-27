@@ -233,6 +233,22 @@ if [[ -f "$DOTFILES_DIR/scripts/install-claude-plugins.sh" ]]; then
 fi
 
 # ==============================================================================
+# Codex Plugins Setup
+# ==============================================================================
+
+echo ""
+if [[ -f "$DOTFILES_DIR/scripts/install-codex-plugins.sh" ]]; then
+    echo "🔌 Codex plugins setup available"
+    read -p "Do you want to install Codex plugins now? (y/N): " setup_codex_plugins
+    if [[ "$setup_codex_plugins" =~ ^[Yy]$ ]]; then
+        bash "$DOTFILES_DIR/scripts/install-codex-plugins.sh"
+    else
+        echo "⏭️  Skipping Codex plugins setup"
+        echo "   You can run it later with: ./scripts/install-codex-plugins.sh"
+    fi
+fi
+
+# ==============================================================================
 # Final Setup
 # ==============================================================================
 
