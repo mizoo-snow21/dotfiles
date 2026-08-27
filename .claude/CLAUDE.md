@@ -32,6 +32,8 @@ If a skill is unregistered or broken and cannot be loaded, **do not substitute f
 | Long autonomous runs / work the user steps away from (`/loop`, "while I sleep") | `pstack:show-me-your-work` |
 | Editing CLAUDE.md / AGENTS.md / any SKILL.md | `writing-for-agents` |
 | Stress-testing a settled plan round by round with codex, before `codex-review` | `grilling` |
+| Force-pushing, merging, rebasing, removing a worktree, or judging a branch merged or pushed | `git-safety` |
+| Fetching a secret, credential, or API key from a secret store | `secret-handling` |
 
 - **"I've been typing the same command all along" is NOT evidence the procedure hasn't changed.** When the *kind* of action changes (investigate → implement, view → create, edit → publish), re-consult this table. Same tool, different kind of action → a different skill applies.
 - Before creating anything that leaves the machine (GitHub issue, PR, comment, public document, external message), check the table **before typing the first command** — not after.
@@ -211,36 +213,5 @@ At the start of a session, if the working project's CLAUDE.md contains a `<!-- P
 - **Real-time task display uses the Task tools (TodoWrite is retired).** At the start of any multi-step work, load them with `ToolSearch("select:TaskCreate,TaskUpdate,TaskList")`, create tasks with TaskCreate, and flip status to in_progress / completed as work proceeds so the TUI task list stays live. **A markdown checklist is NOT an acceptable substitute (user directive, 2026-07-23) — never silently degrade to plain-text task lists.** If the Task tools are missing or the display breaks, report it to the user as a blocker and run `Skill(task-display-triage)` — the diagnostic order (kill-switch check, env, version, what needs user approval) lives there.
 - **A shared document (Word on OneDrive / SharePoint and the like) is finished by editing it directly in the browser** (user directive, 2026-08-06). Downloading it locally and swapping the whole file back in is the exception, taken only after confirming ownership and write permission. When one item gets stuck, do not move the entire job onto another route — re-pick the route per item (details in `Skill(word-clipboard)` → Route C)
 - **Which browser tool: local UI/frontend dev → `Skill(webapp-testing)` (Playwright); real logged-in browser / external sites → Claude in Chrome.** For screenshots, DOM/console inspection, or driving the app under development (localhost / the code in this repo), invoke **`webapp-testing`** — do NOT default to Claude-in-Chrome just because the word "screenshot" was used. Reserve Claude in Chrome for tasks that genuinely need the user's real browser session (authenticated sites, external pages) or when "Chrome" is explicitly requested. The trap: Claude-in-Chrome's MCP tools are always loaded and prominent, so "take a screenshot" drifts to them by default even though webapp-testing is the right tool for dev work.
-
-## Worktree Cleanup
-
-Never leave a worktree lying around once you are done with it. `~/.claude/bin/worktree-reap.sh` runs
-automatically at SessionStart and **stashes untracked files before deleting** (stash location
-`~/.local/state/claude/worktree-attic/`, expiring after 30 days. It sits outside the dotfiles repo
-because a `git clean -fdx` in there would wipe the stashed data along with everything else).
-
-- **Never leave a permanent artifact sitting untracked inside a worktree.** The attic is an
-  accident-recovery layer, not a storage location. Findings (`tasks/lessons.md` and the like),
-  measurement scripts, and investigation notes either **get committed to the repo or get written
-  outside the worktree** (`~/.claude/artifacts/<repo>/<issue>/`, for example).
-  Real case: on 2026-08-22, 161 lines of findings piled up untracked in `tasks/lessons.md` and were
-  nearly lost when the worktree was removed (none of it had reached main)
-- **Do not use `git branch --merged` / `git merge-base --is-ancestor` to decide whether a branch is merged.**
-  In a squash-merge repo, a merged branch's commits never become ancestors of main.
-  Use `gh pr list --head <branch> --state merged`
-- **`git worktree add -b X origin/main` sets the upstream to `origin/main`.**
-  "It has an upstream" does not mean "it has been pushed". To decide whether it was pushed, confirm the
-  upstream is `origin/<the branch's own name>`. Get this wrong and you delete unpushed work
-- Delete with `git worktree remove` (not `rm -rf` + `prune`). Check that no process is still using it, too
-
-## Git Safety
-
-- git commands that branch on success/failure (rebase / merge / cherry-pick) must not be judged through a pipe — a trailing `tail`/`head` returns exit 0 and hides the real failure. Use `cmd; rc=$?` and check `$rc` directly.
-- Before any force-push or merge, guard explicitly: `git diff --check` (conflict markers), `git status --porcelain | grep -E '^(UU|AA|DD)'` (unresolved paths), and for an in-progress rebase test that the resolved dir actually exists — `test -d "$(git rev-parse --git-path rebase-merge)" -o -d "$(git rev-parse --git-path rebase-apply)"` (works in linked worktrees where `.git` is a file; `--git-path` only prints a path, so you must `test -d` it, not just run it). Never force-push with an unresolved conflict or an in-progress rebase.
-
-## Secret Handling
-
-- Never guess secret names or scan/enumerate multiple secrets (reads as credential-scanning and gets denied). Derive the canonical secret ID and field name from the project's own config first — `rg -n "SECRET_NAME|secretName" scripts/ infrastructure/` or the CDK/Terraform constructs — then fetch that single entry.
-- Never print a secret value; validate format by regex only. Write it to the target (`.env.local` etc.) without echoing.
 
 @RTK.md
