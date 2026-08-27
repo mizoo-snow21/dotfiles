@@ -61,6 +61,20 @@ while read -r plugin; do
     fi
 done < <(jq -r '.enabledPlugins // {} | keys[]' "$SETTINGS")
 
+# ==============================================================================
+# Post-install: pstack の SessionStart フック無効化
+# ==============================================================================
+# pstack のフックは「非自明なタスクは poteto-mode を通せ」という指示を毎セッション注入し、
+# CLAUDE.md の SDD フロー(実装は Cursor 経由 / 二段レビュー / GO ゲート)と入り口が二重になる。
+# スキル本体は残すので pstack:* は明示呼び出しで使える。
+# ponytail: プラグイン更新でフックは復活する。更新後はこのスクリプトを再実行する
+
+for hooks_json in "$HOME"/.claude/plugins/cache/pstack-claude/pstack/*/hooks/hooks.json; do
+    [[ -f "$hooks_json" ]] || continue
+    mv "$hooks_json" "${hooks_json}.disabled"
+    echo "🔇 Disabled pstack SessionStart hook: $hooks_json"
+done
+
 echo ""
 echo "🎉 Claude Code plugins installation completed!"
 echo "   Run '/reload-plugins' in Claude Code to activate."
