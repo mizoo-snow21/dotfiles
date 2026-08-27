@@ -21,10 +21,10 @@ If a skill is unregistered or broken and cannot be loaded, **do not substitute f
 | Wrapping up a branch | `superpowers:finishing-a-development-branch` |
 | Creating or updating GitHub issues / PRs | `github-issues` |
 | Checking local UI/frontend, screenshots | `webapp-testing` |
-| Content bound for a Word document (paste / docx update / Word Online 上の編集) | `word-clipboard` |
+| Content bound for a Word document (paste / docx update / editing in Word Online) | `word-clipboard` |
 | Task display broken / Task tools missing | `task-display-triage` |
 | Assessing the blast radius of a change | `gitnexus-impact-analysis` |
-| **本番の多数レコードへ一括処理を仕掛ける**（再処理 / バックフィル / 一括再分類） | `bulk-production-ops` |
+| **Firing a bulk operation at many production records** (reprocessing / backfill / bulk re-classification) | `bulk-production-ops` |
 | Closing out or handing over a session | `handover` |
 | Two or more credible options with no decisive argument on paper (design / UI / algorithm) | `pstack:arena` |
 | **Why is it built this way** (origin of a design decision / where a regression started / postmortem) | `pstack:why` |
@@ -87,7 +87,7 @@ blast radius is non-trivial.
 
 ### 3. Plan / Todo Review Loop
 - **Trigger**: implementation plan / spec / todo documents — before showing to the user
-- **issue body / PR body は対象外** (user directive, 2026-08-22)。codex の利用上限が厳しいため、レビューの価値が最も高い文書に絞る。外部公開物の事実確認が要るときは Fable などの subagent に出す
+- **Issue bodies / PR bodies are out of scope** (user directive, 2026-08-22). codex's usage limit is tight, so the review is spent on the documents where it is worth the most. When an outward-facing document needs its facts checked, dispatch a subagent such as Fable instead
 - **Procedure**: `Skill(codex-review)` (document review is covered by the skill)
 - **When codex hits its usage limit, fall back to `pstack:interrogate`** (four models attacking the document). It replaces codex here, it is not an extra gate — never run both
 - **Local policy**: when an already-created issue / PR needs fixing, **edit in place**. The create → close → reopen churn destroys audit context — avoid it
@@ -209,27 +209,29 @@ At the start of a session, if the working project's CLAUDE.md contains a `<!-- P
 - **Destructive operations (force-push / delete / overwrite) and changes needing user judgment run in the foreground** and are shown before executing.
 - **Browser automation (Claude-in-Chrome): reuse one tab per session.** Navigate within the existing tab instead of opening new ones, and don't call `tabs_context_mcp createIfEmpty` repeatedly. Close tabs you opened with `tabs_close_mcp` when the work is done. **Why:** when the tab group drops mid-session, recreating it spawns a fresh tab and orphans the old one (outside the current group → not API-closable), so orphan "Claude" tabs pile up and clutter the user's browser. Minimize group recreation and clean up as soon as extra tabs appear.
 - **Real-time task display uses the Task tools (TodoWrite is retired).** At the start of any multi-step work, load them with `ToolSearch("select:TaskCreate,TaskUpdate,TaskList")`, create tasks with TaskCreate, and flip status to in_progress / completed as work proceeds so the TUI task list stays live. **A markdown checklist is NOT an acceptable substitute (user directive, 2026-07-23) — never silently degrade to plain-text task lists.** If the Task tools are missing or the display breaks, report it to the user as a blocker and run `Skill(task-display-triage)` — the diagnostic order (kill-switch check, env, version, what needs user approval) lives there.
-- **共有文書（OneDrive/SharePoint のWord等）は、ブラウザ上で直接編集して仕上げるのが既定**（user directive, 2026-08-06）。ローカルにダウンロードして直しファイルごと差し替える経路は、所有者と書き込み権限を確認したうえでの例外。1項目が詰まっても案件ごと別ルートに移さず、項目単位でルートを選び直す（詳細は `Skill(word-clipboard)` の Route C）
+- **A shared document (Word on OneDrive / SharePoint and the like) is finished by editing it directly in the browser** (user directive, 2026-08-06). Downloading it locally and swapping the whole file back in is the exception, taken only after confirming ownership and write permission. When one item gets stuck, do not move the entire job onto another route — re-pick the route per item (details in `Skill(word-clipboard)` → Route C)
 - **Which browser tool: local UI/frontend dev → `Skill(webapp-testing)` (Playwright); real logged-in browser / external sites → Claude in Chrome.** For screenshots, DOM/console inspection, or driving the app under development (localhost / the code in this repo), invoke **`webapp-testing`** — do NOT default to Claude-in-Chrome just because the word "screenshot" was used. Reserve Claude in Chrome for tasks that genuinely need the user's real browser session (authenticated sites, external pages) or when "Chrome" is explicitly requested. The trap: Claude-in-Chrome's MCP tools are always loaded and prominent, so "take a screenshot" drifts to them by default even though webapp-testing is the right tool for dev work.
 
-## Worktree の後始末
+## Worktree Cleanup
 
-worktree は使い終わったら残さない。`~/.claude/bin/worktree-reap.sh` が SessionStart で自動実行され、
-**untracked を退避してから削除**する（退避先 `~/.local/state/claude/worktree-attic/`、30日で失効。
-dotfiles リポジトリの中に置くと `git clean -fdx` で退避データごと消えるため外に出している）。
+Never leave a worktree lying around once you are done with it. `~/.claude/bin/worktree-reap.sh` runs
+automatically at SessionStart and **stashes untracked files before deleting** (stash location
+`~/.local/state/claude/worktree-attic/`, expiring after 30 days. It sits outside the dotfiles repo
+because a `git clean -fdx` in there would wipe the stashed data along with everything else).
 
-- **恒久的な成果物を worktree 内に untracked のまま置かない。** attic は事故回収層であって保管場所ではない。
-  知見（`tasks/lessons.md` 等）・測定スクリプト・調査メモは、**リポジトリにコミットするか、
-  worktree の外**（`~/.claude/artifacts/<repo>/<issue>/` など）へ書く。
-  実例: 2026-08-22 に `tasks/lessons.md` へ 161 行の知見が untracked で溜まり、
-  worktree 削除で失いかけた（main 側に未反映だった）
-- **マージ済みの判定に `git branch --merged` / `git merge-base --is-ancestor` を使わない。**
-  squash merge のリポジトリでは、マージ済みでもブランチのコミットが main の祖先にならない。
-  `gh pr list --head <branch> --state merged` を使う
-- **`git worktree add -b X origin/main` は upstream を `origin/main` に設定する。**
-  「upstream がある」は push 済みを意味しない。push 済みの判定は upstream が `origin/<自分のブランチ名>`
-  であることを確認する。ここを誤ると未 push の作業ブランチを消す
-- 削除は `git worktree remove`（`rm -rf` + `prune` ではない）。使用中プロセスの有無も確認する
+- **Never leave a permanent artifact sitting untracked inside a worktree.** The attic is an
+  accident-recovery layer, not a storage location. Findings (`tasks/lessons.md` and the like),
+  measurement scripts, and investigation notes either **get committed to the repo or get written
+  outside the worktree** (`~/.claude/artifacts/<repo>/<issue>/`, for example).
+  Real case: on 2026-08-22, 161 lines of findings piled up untracked in `tasks/lessons.md` and were
+  nearly lost when the worktree was removed (none of it had reached main)
+- **Do not use `git branch --merged` / `git merge-base --is-ancestor` to decide whether a branch is merged.**
+  In a squash-merge repo, a merged branch's commits never become ancestors of main.
+  Use `gh pr list --head <branch> --state merged`
+- **`git worktree add -b X origin/main` sets the upstream to `origin/main`.**
+  "It has an upstream" does not mean "it has been pushed". To decide whether it was pushed, confirm the
+  upstream is `origin/<the branch's own name>`. Get this wrong and you delete unpushed work
+- Delete with `git worktree remove` (not `rm -rf` + `prune`). Check that no process is still using it, too
 
 ## Git Safety
 
