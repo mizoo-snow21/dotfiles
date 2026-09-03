@@ -1,6 +1,6 @@
 ---
 name: cursor-delegate
-description: Delegate implementation tasks to Cursor CLI in headless mode, routing to Composer 2.5 Fast or Grok 4.6 Fast by difficulty. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
+description: Delegate implementation tasks to Cursor CLI — headless, or as a visible Orca pane when this session runs inside Orca — routing to Composer 2.5 Fast or Grok 4.6 Fast by whether the task has a right answer and how complex it is. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
 ---
 
 # Cursor Delegate
@@ -41,7 +41,7 @@ Rule of thumb: *ambient conventions (`.cursor/rules` / `AGENTS.md`) → already 
 
 ## Principles
 
-1. **Let Cursor think** — Do NOT provide exact diffs or code snippets. Describe WHAT needs to be done at task level. Let Cursor figure out the implementation and tests
+1. **Let Cursor think** — describe WHAT needs to be done at task level and let Cursor figure out the implementation and tests. **This binds the plan document, not just the prompt**: the prompt is copied from a plan step, so a plan step carrying the implementation hands Cursor the same transcript. The only literals either one carries are the contracts Cursor cannot derive — API signatures, schema / migration DDL, exact config values, error strings the tests assert. The symptom of getting this wrong is a task review reporting the diff "matches the plan verbatim": that is a copyist, and the seams the plan never specified are the one surface nobody reasoned about (a regression landed there on 2026-09-03). Difficulty-based model routing is also dead weight when the task is transcription
 2. **Cursor codes only** — Git operations (commit, push, branch) are handled by Claude Code
 3. **Cursor has *some* context** — it auto-loads `.cursor/rules/*.mdc`, `AGENTS.md`, and `.cursor/skills/` (see "What Cursor already knows"). Don't repeat those, but never rely on skill auto-fire for a required constraint: **synced skills the task requires get invoked by name (`/name` / `$name`), plugin skills get a read-first path instruction, and ad-hoc constraints (caller contracts, blast radius) get pasted verbatim.** `CLAUDE.md` stays invisible and its orchestration parts stay on Claude Code's side
 4. **Out-of-scope changes are forbidden** — Files not related to the task should not be modified
@@ -132,6 +132,37 @@ stdlib / 既存依存優先。意図的な簡略化には `ponytail:` コメン�
 
 ### 3. Run Cursor
 
+#### Route selection
+
+Two transports for the same dispatch. The Bash tool runs as a child of whatever pane hosts
+this session, so it inherits that pane's environment — which is how you can tell where you are
+without asking the user.
+
+```bash
+ROUTE=A
+if [ -n "$ORCA_PANE_KEY" ] && orca status --json 2>/dev/null | python3 -c \
+  'import sys,json;d=json.load(sys.stdin);sys.exit(0 if d.get("ok") and d["result"]["runtime"]["reachable"] else 1)'
+then ROUTE=B; fi
+```
+
+**Route B when both hold; Route A otherwise.** Route B puts the run in a visible tab the user
+can watch and interrupt, and lets review-fix rounds reuse the live pane instead of a chat id.
+Same prompt, same model routing, same read-back check either way — only the transport differs,
+so when anything about B looks uncertain, A always works.
+
+Both halves of the condition earn their place:
+
+- **`ORCA_PANE_KEY`, not `TERM_PROGRAM`.** `TERM_PROGRAM` describes the terminal doing the
+  drawing, so a multiplexer between you and Orca (tmux sets `TERM_PROGRAM=tmux`) overwrites it
+  and the check silently degrades to Route A. The `ORCA_*` variables are set only by Orca and
+  survive nesting.
+- **`orca status` before creating anything.** The environment says the pane came from Orca; it
+  does not say the runtime is answering right now. Without this, `worktree create` can succeed
+  and `terminal create` then fail, leaving an orphan checkout to clean up. One cheap call up
+  front turns that into a clean fall back to Route A.
+
+#### Route A — headless (`cursor agent -p`)
+
 ```bash
 # Route by difficulty FIRST (see Model routing), then mint the session id —
 # every review-fix round needs both.
@@ -158,6 +189,78 @@ EOF
 
 Report `$CHAT_ID` alongside the task so it survives into the review round. There is no headless way to recover it afterwards.
 
+#### Route B — Orca pane (`orca terminal`)
+
+Inside Orca, launch Cursor as a real pane instead of a child process. The user sees the work
+happen and can step in; you keep full programmatic control through the CLI.
+
+```bash
+MODEL=composer-2.5-fast   # same routing as Route A
+
+# 1 task = 1 worktree. Orca creates the checkout and owns the tab.
+orca worktree create --name <task-name> --repo path:<project-dir> --no-parent --json
+# → result.worktree.id is "<repoId>::<worktreePath>"; copy that whole value.
+
+orca terminal create --worktree id:<repoId>::<worktreePath> \
+  --title "cursor: <task-name>" \
+  --command "cursor agent --trust --model $MODEL" --json
+# → result.terminal.handle
+
+orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
+
+# The prompt goes in as ONE argument. Embedded newlines survive: Orca delivers it as a
+# bracketed paste, so a multi-line brief is not submitted line by line.
+orca terminal send --terminal <handle> --enter --json --text "$(cat <<'EOF'
+...same prompt body as Route A...
+EOF
+)"
+
+orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 3600000 --json
+orca terminal read --terminal <handle> --json          # read-back + completion report
+orca terminal close --terminal <handle> --tab --json   # only after step 4 verification passes
+```
+
+Why each piece is there — all four checked against a live pane on 2026-08-31:
+
+- **`--trust` is not optional.** A fresh worktree makes Cursor raise a "Workspace Trust
+  Required" dialog and sit on it. Orca surfaces this as `blockedReason:
+  "codex-trust-workspace"` so you are not blind, but nothing runs until it is answered.
+- **Write the argv yourself in `--command`.** Orca's own launcher (`--agent cursor`) injects
+  its configured default `--yolo`, which this skill forbids. An explicit command string
+  bypasses that — confirmed with `ps`: the process carries exactly the argv you wrote.
+- **`--for tui-idle` replaces the exit code.** A TUI agent does not exit when the task is
+  done, so "finished" means the pane went quiet. That is weaker evidence than `$?`, which is
+  why reading the pane afterwards is required here rather than merely useful.
+- **`blockedReason` can be stale.** Immediately after the trust dialog was answered, the next
+  `wait` still reported `codex-trust-workspace` although the pane had already moved on. Treat
+  one `wait` result as a hint and confirm with `terminal read` before concluding anything
+  about the pane's state.
+
+**Review-fix rounds need no chat id.** The pane is still alive, so send the findings to the
+same handle with another `terminal send`. This is where Route B is plainly better: in Route A
+the chat id has to be threaded through by hand and cannot be recovered once lost.
+
+**Parallel Claude sessions share one Orca runtime.** Handles are global, not scoped to the
+session that made them: a bare `orca terminal list` returns panes belonging to other sessions,
+and every Orca command that accepts `--terminal` treats it as *optional*, defaulting to "the
+active terminal in the current worktree." In a worktree with two sessions in it that default is
+a coin flip, and losing it means typing into someone else's agent. Two habits keep this safe,
+and both are already in the block above:
+
+- **Always pass `--terminal <handle>` explicitly**, using the handle you got back from
+  `terminal create`. Never rely on the active-terminal default, and never match on a pane's
+  title — Orca retitles an agent pane with whatever it is currently working on.
+- **Address worktrees as `id:<repoId>::<path>`, never `active`.** `--name` also has to be
+  unique across concurrently running dispatches, or two sessions collide on the same checkout.
+
+Your own pane is identified by `$ORCA_TERMINAL_HANDLE`, which is useful for making sure a
+handle you are about to write to is not the session you are running in.
+
+**Orca does not isolate test environments.** A separate worktree is still one machine —
+container project names, host ports, and databases collide exactly as before. Parallel
+dispatch still needs its own namespace per worktree: `portless run` for dev servers, and a
+separate database / compose project for anything else.
+
 #### Capture the whole reply, then check the read-back
 
 **Never pipe the dispatch through `head`/`tail`.** The read-back you demanded arrives at the
@@ -177,6 +280,11 @@ EOF
 head -20 "$LOG"   # read-back
 tail -40 "$LOG"   # completion report
 ```
+
+**Route B reads the pane, not a log file.** `orca terminal read --terminal <handle> --json`
+returns plain text, so the recitation is directly greppable. The default response is a bounded
+tail, which is the wrong end — the read-back sits at the *top*. Page from `oldestCursor` and
+follow `nextCursor` while `limited` is true so you actually see the opening of the reply.
 
 **Then actually check it.** A read-back requirement you never verify is not a control — it is a
 comment. Confirm the reply opens with the recitation and that it names the actual procedure
@@ -205,17 +313,27 @@ The same rule applies to the codex fallback in 3b.
 
 Two sanctioned models. Both verified present in `cursor agent models`.
 
-| Difficulty | `--model` | What lands here |
-| --- | --- | --- |
-| Low–medium | `composer-2.5-fast` | Mechanical edits, adding a field, straightforward test additions, single-file changes whose blast radius is obvious, formatting, constant swaps |
-| High | `cursor-grok-4.6-high-fast` | Concurrency and race conditions, state-management refactors, contract changes spanning files, shared-component changes, review findings that need a judgement call, **any re-implementation after a task was sent back** |
+Route with two questions, in this order. Difficulty alone puts "simple but open-ended" and "complex but fully specified" in the same box, and they need opposite models.
+
+1. **Does the task have a right answer?** The spec pins the output (a defined contract, a stated algorithm, a test that must pass) → stable. The implementer still decides shape — visual design, API surface, naming a new abstraction → exploratory.
+2. **How complex is it?** Number of files, callers, and interacting states.
+
+| Right answer? | Complexity | `--model` | What lands here |
+| --- | --- | --- | --- |
+| Yes | Low | `composer-2.5-fast` | Mechanical edits, adding a field, straightforward test additions, single-file changes whose blast radius is obvious, formatting, constant swaps |
+| Yes | High | `cursor-grok-4.6-high-fast` | Concurrency and race conditions, state-management refactors, contract changes spanning files, shared-component changes |
+| No | Any | `cursor-grok-4.6-high-fast` | UI the spec leaves open, a new module's public shape, review findings that need a judgement call |
+
+**Any re-implementation after a task was sent back goes to `cursor-grok-4.6-high-fast`**, whichever cell the original task sat in.
+
+**Write the choice into the task brief: the cell, the model, and the one-line reason** ("Yes / High → `cursor-grok-4.6-high-fast`: three callers of `X` plus interacting state"). Nothing enforces the branch, so the record is the enforcement — it puts the call in front of the reviewer and the user, and a cell you cannot name is a routing decision you did not make.
 
 **Raising the tier does not replace verification.** Whatever the model, when a task adds a test, inject the bug it claims to catch and confirm it goes RED yourself. Ask for the actual passed/failed counts in the report.
 
 #### Model traps
 
 - **A bare `composer-2.5` (no `-fast`) in an old prompt or script is stale.** Replace it with `composer-2.5-fast`. `cursor-grok-*` ids are NO LONGER stale — see Model routing.
-- **Route by difficulty before dispatch, not mid-task.** Escalating because a task "feels hard" halfway through wastes the session's context. Judge from the task brief and the blast radius you already measured.
+- **Answer both routing questions before dispatch, not mid-task.** Escalating because a task "feels hard" halfway through wastes the session's context. Judge from the task brief and the blast radius you already measured.
 - **Never pass a Codex model** (`gpt-5.3-codex-high` etc.) as a Cursor `--model`. Codex is the reviewer side. The one place codex appears as an implementer is the quota fallback below, where it runs as its own CLI, not as a Cursor model.
 
 ### 3b. Quota fallback: implement via the codex CLI when Cursor's quota is gone
@@ -280,7 +398,10 @@ Follow the project's review workflow (e.g., spec review + quality review via sub
 
 ## Session management
 
-**Mint the chat id yourself before dispatching, and address every follow-up to that id.**
+**Route B has no session to manage** — the pane holds the conversation, so a follow-up is
+another `orca terminal send` to the same handle. Everything below is Route A.
+
+**Route A: mint the chat id yourself before dispatching, and address every follow-up to that id.**
 
 ```bash
 # 1. Route by difficulty, then create the session up front (prints a UUID and nothing else)

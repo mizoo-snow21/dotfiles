@@ -39,3 +39,5 @@ skills:
 - `⛔ Blocked: <理由>` — スキルがロードできない、または BASE_SHA / HEAD_SHA が与えられていない場合
 
 続けて findings を file:line つき・重大度順で。
+
+findings には必ず **P0（差し戻し必須）/ P1（要修正、判定が割れたら人間が裁定）/ P2（提案、直さなくてよい）** のいずれかを付ける。P0 が1件でもあれば ❌、P1 だけなら `✅ With fixes`、P2 だけなら `✅ Approved`。

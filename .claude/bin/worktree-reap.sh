@@ -61,7 +61,12 @@ salvage() {  # $1=worktree  $2=dest ; 退避できたら0
   return 0
 }
 
+# 実体を失った worktree 登録を先に落とす。残したままだと毎回「削除対象」と判定され、
+# 下の cwd 走査まで走ってセッション開始が数十秒〜タイムアウトまで伸びる。
+git worktree prune 2>/dev/null || true
+
 reaped=0
+cwds=""  # 全プロセスの cwd 一覧。必要になった時点で一度だけ取る
 while IFS=$'\t' read -r wt br; do
   [ -z "$wt" ] || [ "$wt" = "$root" ] && continue
   name=$(basename "$wt")
@@ -91,11 +96,10 @@ while IFS=$'\t' read -r wt br; do
     continue
   fi
 
-  busy=""
-  for p in $(pgrep -f . 2>/dev/null); do
-    c=$(lsof -p "$p" -a -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
-    case "$c" in "$wt"*) busy="$p"; break;; esac
-  done
+  # プロセスごとに lsof を起動すると数百回 fork することになるので、1 回で全部取る
+  [ -z "$cwds" ] && cwds=$(lsof -d cwd -Fpn 2>/dev/null \
+    | awk '/^p/{pid=substr($0,2)} /^n/{print pid"\t"substr($0,2)}')
+  busy=$(printf '%s\n' "$cwds" | awk -F'\t' -v w="$wt" 'index($2,w)==1{print $1; exit}')
   [ -n "$busy" ] && { echo "  skip $name (PID $busy が使用中)"; continue; }
 
   dest="$ATTIC/$repo/${name}-$(date +%Y%m%d-%H%M%S)"
@@ -110,8 +114,6 @@ while IFS=$'\t' read -r wt br; do
     echo "  ⛔ $name $out"
   fi
 done < <(git worktree list --porcelain | awk '/^worktree /{w=$2} /^branch /{print w"\t"substr($2,12)}')
-
-git worktree prune 2>/dev/null || true
 
 # attic の期限切れを掃除
 [ -d "$ATTIC" ] && find "$ATTIC" -mindepth 2 -maxdepth 2 -type d -mtime +"$ATTIC_KEEP_DAYS" -exec rm -rf {} + 2>/dev/null
