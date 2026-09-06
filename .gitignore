@@ -86,3 +86,6 @@ docs/superpowers/
 .claude/daemon.lock
 .claude/daemon.status.json
 .claude/daemon-*
+
+# Claude Code artifacts (stash/branch backups from other repos)
+.claude/artifacts/
