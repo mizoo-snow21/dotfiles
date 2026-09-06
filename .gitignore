@@ -89,3 +89,7 @@ docs/superpowers/
 
 # Claude Code artifacts (stash/branch backups from other repos)
 .claude/artifacts/
+
+# Cursor machine state (extensions are installed by Cursor itself, ide_state is per-machine)
+.cursor/extensions/
+.cursor/ide_state.json
