@@ -89,5 +89,20 @@ for feature in "${FEATURES[@]}"; do
     fi
 done
 
+# ==============================================================================
+# Update check off
+# codex は mise 管理。TUI の起動時更新ポップアップは install 先を pnpm と誤判定して
+# `pnpm add -g` を打ち ERR_PNPM_NO_GLOBAL_BIN_DIR で落ちるので止める。更新は `mise up npm:@openai/codex`
+# ==============================================================================
+
+if grep -qE '^[[:space:]]*check_for_update_on_startup[[:space:]]*=' "$CODEX_CONFIG" 2>/dev/null; then
+    echo "✅ check_for_update_on_startup already set"
+else
+    # トップレベルキーは最初のテーブルより前に置く必要があるのでファイル先頭に差し込む
+    { printf 'check_for_update_on_startup = false\n\n'; cat "$CODEX_CONFIG" 2>/dev/null || true; } > "${CODEX_CONFIG}.tmp" \
+        && mv "${CODEX_CONFIG}.tmp" "$CODEX_CONFIG"
+    echo "🚫 Disabled check_for_update_on_startup"
+fi
+
 echo ""
 echo "🎉 Codex plugins installation completed!"
