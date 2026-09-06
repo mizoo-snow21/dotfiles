@@ -23,3 +23,9 @@ export PATH="$HOME/.local/bin:$PATH"
 if command -v mise >/dev/null 2>&1; then
   eval "$(mise activate zsh)"
 fi
+
+# codex は mise 管理（config.toml の npm:@openai/codex）。self-updater は install 先を
+# pnpm と誤判定して `pnpm add -g` を打ち ERR_PNPM_NO_GLOBAL_BIN_DIR で落ちるので mise に振り替える
+codex() {
+  if [[ "$1" == update ]]; then mise up npm:@openai/codex; else command codex "$@"; fi
+}
