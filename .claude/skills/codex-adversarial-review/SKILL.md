@@ -48,7 +48,7 @@ behaving the way OpenAI tuned it.
 ### 3. Run
 
 ```bash
-codex exec -m gpt-5.6-sol \
+codex exec -m gpt-6-astra \
   --output-schema ~/.claude/skills/codex-adversarial-review/schemas/review-output.schema.json \
   "<filled prompt>" < /dev/null
 ```

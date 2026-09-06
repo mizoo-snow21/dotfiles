@@ -346,7 +346,7 @@ Every Cursor model draws on the **same** plan quota, so on `You're out of usage`
 # Skills under ~/.codex/skills (symlinked from ~/.claude/skills) can also be
 # invoked explicitly with $skill-name in the prompt — but the TDD skill is a
 # plugin skill, NOT in that dir, so the absolute-path read-first instruction stays.
-codex exec -m gpt-5.6-sol --sandbox workspace-write "$(cat <<'EOF'
+codex exec -m gpt-6-astra --sandbox workspace-write "$(cat <<'EOF'
 ...same prompt you would have given Cursor...
 EOF
 )" < /dev/null
