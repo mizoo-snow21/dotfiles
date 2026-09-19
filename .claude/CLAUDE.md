@@ -86,6 +86,7 @@ blast radius is non-trivial.
 - Offload research, exploration, and parallel analysis to subagents
 - For complex problems, throw more compute at it via subagents
 - One tack per subagent for focused execution
+- **Route by difficulty through the agent type, not a hand-picked `model:`** (user directive, 2026-09-06). The four types in `~/.claude/agents/` pin the model: `investigate-low` (haiku) for a single fact, file search, or a run's verdict; `verify` (sonnet) for a fixed procedure — prod read-only DRY_RUN, run verification, PR watching; `investigate-deep` (opus) for cross-module design investigation; `judge` (fable) for contested design calls, weak-evidence detection, and audits. task-reviewer stays sonnet, branch-reviewer inherits the session model
 
 ### 3. Plan / Todo Review Loop
 - **Trigger**: implementation plan / spec / todo documents — before showing to the user
