@@ -34,3 +34,5 @@ cask "stablyai/orca/orca"
 cask "cmux"
 cask "drawio"
 cask "obs"
+# antigravity: GUI .app ではなく CLI のみ。mise(aqua) にもあるが brew に寄せる
+cask "antigravity-cli"
