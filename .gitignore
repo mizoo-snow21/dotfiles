@@ -90,6 +90,10 @@ docs/superpowers/
 # Claude Code artifacts (stash/branch backups from other repos)
 .claude/artifacts/
 
+# Feedback drafts queued locally by SendFeedback — never sent without approval,
+# and they carry session-specific detail that has no business in the repo
+.claude/feedback/
+
 # Cursor machine state (extensions are installed by Cursor itself, ide_state is per-machine)
 .cursor/extensions/
 .cursor/ide_state.json
