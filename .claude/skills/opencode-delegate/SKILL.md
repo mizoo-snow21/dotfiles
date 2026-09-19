@@ -1,6 +1,6 @@
 ---
 name: opencode-delegate
-description: Delegate implementation tasks and document reviews to the opencode CLI in headless mode — default model `opencode-go/glm-5.3`. Use when the user says "opencode", "opencode go", "opencodeで実装", "opencodeに投げて", "opencodeに実装させて", or wants an implementer or reviewer other than Cursor/Codex — including when codex is out of quota and a review still has to happen. Read this before writing any `opencode run` command — the headless permission trap, the model roster, and the skill-visibility differences are here.
+description: Delegate implementation tasks and document reviews to the opencode CLI in headless mode — default model `opencode-go/deepseek-v4.1-flash`. Use when the user says "opencode", "opencode go", "opencodeで実装", "opencodeに投げて", "opencodeに実装させて", or wants an implementer or reviewer other than Cursor/Codex — including when codex is out of quota and a review still has to happen. Read this before writing any `opencode run` command — the headless permission trap, the model roster, and the skill-visibility differences are here.
 ---
 
 # opencode Delegate
@@ -14,10 +14,10 @@ never drift apart.
 
 Everything below was verified against opencode **1.18.14** on 2026-08-07.
 
-**Default model: `opencode-go/glm-5.3`** — for implementation, fix rounds, and document
-review alike (user directive, 2026-08-15, superseding the 2026-08-07 `kimi-k3` default:
-glm is the cheaper model and these runs are long). One model everywhere means one set of
-quirks to learn instead of four; deviate only for a reason you can name.
+**Default model: `opencode-go/deepseek-v4.1-flash`** — for implementation, fix rounds, and
+document review alike (user directive, 2026-09-15, superseding the 2026-08-15 `glm-5.3`
+default). One model everywhere means one set of quirks to learn instead of four; deviate only
+for a reason you can name. `glm-5.3` is the standing second choice when deepseek is blocked.
 
 ## What opencode already knows
 
@@ -73,9 +73,22 @@ auto-rejects, and ends the dispatch with the review half-written. Two defences:
 - **Give paths in the prompt relative to `--dir`**, not absolute. The agent then has nothing
   to mistype a prefix onto. (Plugin skills under `~/.claude/plugins/` are the exception —
   those must stay absolute, which is exactly why they need the permission above.)
+- **Tell the implementer to keep scratch files inside `--dir`** (`test-results/` or similar) and to
+  pass relative paths instead of `cd`-ing. Observed 2026-09-16: a T8 dispatch died at `cd /tmp && curl …`
+  — `/tmp/*` raised `external_directory`, auto-rejected, and the run ended with nothing written.
 - **Add the project root itself to `external_directory`** when the run reads widely inside it.
   It costs nothing (the agent already has `--dir` access to that tree) and converts a typo
   from a fatal rejection into a harmless failed read the agent can recover from.
+
+**`external_directory` grants writes, not just reads — and `--dir` stops being a boundary.**
+Observed 2026-09-15: a run dispatched with `--dir <repo>/.worktrees/t7-e2e`, holding
+`{"<repo>/**":"allow"}`, wrote its deliverable into the **main** checkout instead of the
+worktree. Both trees matched the glob, so nothing was rejected and nothing was logged. The
+damage is to your own judgement: `git status` in the worktree showed no work, the task looked
+abandoned, and the implementer's truthful "tests pass" report read as a fabrication. **Check
+every tree the glob covers before concluding a run produced nothing.** Scope the grant to the
+paths the run must read (the plugin cache, a sibling spec) and leave the write target to
+`--dir`, or accept that the whole glob is the write surface.
 
 ## Dispatch
 
@@ -94,7 +107,7 @@ python3 -c 'import os,sys;[print(os.path.realpath(p)) for p in sys.argv[1:] if p
 TITLE="t3-fix-add-$(date +%H%M)"   # unique — this is how you find the session later
 
 opencode run --dir "<project-dir>" \
-  -m opencode-go/glm-5.3 \
+  -m opencode-go/deepseek-v4.1-flash \
   --agent build \
   --title "$TITLE" \
   "$(cat <<'EOF'
@@ -128,7 +141,7 @@ EOF
 
 `opencode models` lists what the **active credential** exposes, not the full catalog
 (`opencode auth list` shows which: here a single **OpenCode Go** entry → the `opencode-go/*`
-half). Use `opencode-go/glm-5.3` unless something below applies.
+half). Use `opencode-go/deepseek-v4.1-flash` unless something below applies.
 
 Roster verified 2026-08-07 by sending a trivial prompt to all 18 `opencode-go` models —
 17 answered. Working: `kimi-k3`, `kimi-k2.7-code`, `kimi-k2.6`, `grok-4.5`, `gpt-5.6-luna`,
@@ -141,18 +154,27 @@ showed **19** `opencode-go` entries, and the new one is **`glm-5.3`**, verified 
 A model missing from this section is not evidence it is unavailable; `opencode models | grep <name>`
 then one throwaway dispatch settles it in seconds.
 
-**`glm-5.3` is now the default for everything** (user directive, 2026-08-15) — implementation,
-fix rounds, and document review. It is the cheaper model, and these runs are long enough for
-that to matter. `kimi-k3` remains in the roster; reach for it only when you can name a reason
-glm fell short on the task at hand.
+**`deepseek-v4.1-flash` is the default for everything** (user directive, 2026-09-15) —
+implementation, fix rounds, and document review. It carried real work on 2026-09-15: a 216-line
+frontend spec review and a full E2E task. `glm-5.3` is the second choice, and earned it — on
+2026-08-15 it reviewed a 1,500-line plan by **re-running the measurements itself** instead of
+trusting the document's numbers, and found a real defect nine prior rounds had missed.
 
-Verified on a real job (2026-08-15): glm-5.3 reviewed a 1,500-line implementation plan and,
-rather than taking its factual claims on trust, **re-ran the measurements itself** — row counts,
-annotation breakdowns, scoring-target totals — and confirmed each one before reporting. It found
-a real defect nine rounds of prior review had missed. It is not a downgrade for review work.
-
-- **`deepseek-v4-flash` is the one failure** — "only available hosted in China and requires…".
-  A region opt-in, not a broken credential; the others in that family answer fine.
+- **The paid and free halves fail independently.** When the workspace balance runs out, every
+  `opencode-go/*` model returns `Insufficient balance` while `opencode/*` keeps answering
+  (`nemotron-3-ultra-free`, `big-pickle`, `muse-spark-*` — all verified 2026-09-15). So
+  "opencode is down" is a claim about one half; probe the other before reaching for another CLI.
+- **The China opt-in gate is real and independent of the balance.** Verified 2026-09-16 after
+  the balance was restored: `glm-5.3`, `kimi-k3` and `deepseek-v4-flash-vision-exp` all answer
+  on the same credential, while `deepseek-v4.1-flash`, `deepseek-v4-flash` and `deepseek-v4-pro`
+  all return "only available hosted in China and requires explicit opt in". **The gate is
+  per-model and set server-side by OpenCode** — the mainline DeepSeek ids were moved behind it
+  between 02:17 and 09:04 on 2026-09-15, mid-session, with nothing changed locally. The catalog
+  cache carries no region field, so there is no way to predict it; probe. Clearing it is a
+  one-click opt-in on the workspace page in the error message, which only the account owner can do.
+- **Do not explain one failure with the other.** An earlier version of this note claimed the
+  opt-in message was the balance wearing a different mask. It is not, and saying so sent the
+  user to the wrong fix.
 - **Disabling models on the OpenCode dashboard does not reach the CLI.** After the user turned
   several off, all 18 still appeared in `opencode models` and all still answered. Probe, don't
   infer from the web UI.
@@ -167,7 +189,7 @@ The catalog cache (`~/.cache/opencode/models.json`) carries `gpt-5.6-sol` under 
 `--model opencode-go/gpt-5.6-sol` returns a 500. Adding an OpenAI / Copilot / OpenRouter
 credential with `opencode auth login` would make `--model openai/gpt-5.6-sol` work. Until then
 sol lives only in the codex CLI, and when codex hits its usage limit the review still has to
-run — that is what the glm-5.3 default is for.
+run — that is what the deepseek default is for.
 
 ## Document review
 
@@ -195,14 +217,16 @@ opencode session list | grep "$TITLE"       # id + title + updated
 
 ```bash
 # Fix round — same session, explicit model each time (resuming does not restore it)
-opencode run --dir "<project-dir>" -s "$SID" -m opencode-go/glm-5.3 "$(cat <<'EOF'
+opencode run --dir "<project-dir>" -s "$SID" -m opencode-go/deepseek-v4.1-flash "$(cat <<'EOF'
 ...review findings to fix, referencing the original task...
 EOF
 )" < /dev/null
 ```
 
 `-c/--continue` targets *the most recent* session, which is ambiguous the moment two
-dispatches run in parallel — use `-s "$SID"`. `--fork` branches a session when you want to
+dispatches run in parallel — use `-s "$SID"`. A session is bound to the `--dir` it was
+created in: once that worktree is removed, `-s` fails at once with `UnknownError … Unexpected server
+error` (observed 2026-09-16) — start a fresh session in the new tree instead of retrying. `--fork` branches a session when you want to
 try a second approach without losing the first.
 
 `--format json` also reports `tokens` and `cost` per step, which is the cheapest way to see
