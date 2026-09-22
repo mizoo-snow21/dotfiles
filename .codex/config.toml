@@ -1,0 +1,89 @@
+# codex は mise 管理 (npm:@openai/codex)。起動時の更新ポップアップは install 先を pnpm と誤判定して
+# `pnpm add -g` を打ち ERR_PNPM_NO_GLOBAL_BIN_DIR で落ちるので止める。更新は `mise up npm:@openai/codex`
+check_for_update_on_startup = false
+model = "gpt-6-sol"
+model_reasoning_effort = "medium"
+
+[projects."/Users/mizoo"]
+trust_level = "trusted"
+
+[projects."/Users/mizoo/mc-mitsumorisatei-bit"]
+trust_level = "trusted"
+
+[projects."/Users/mizoo/kakusill"]
+trust_level = "trusted"
+
+[projects."/Users/mizoo/pj-k"]
+trust_level = "trusted"
+
+[projects."/private/tmp/claude-501/-Users-mizoo/ad496df2-c872-4573-8bd6-85a3d131a1e9/scratchpad/pony-smoke"]
+trust_level = "trusted"
+
+[projects."/Users/mizoo/advics-bit-FY2026"]
+trust_level = "trusted"
+
+[projects."/Users/mizoo/dotfiles"]
+trust_level = "trusted"
+
+[projects."/Users/mizoo/Library/Application Support/orca/rate-limit-pty-cwd"]
+trust_level = "trusted"
+
+[tui.model_availability_nux]
+"gpt-5.5" = 4
+"gpt-5.6-sol" = 4
+gpt-6-astra = 4
+
+[notice]
+hide_rate_limit_model_nudge = true
+
+[hooks.state]
+
+[hooks.state."/Users/mizoo/kakusill/.codex/hooks.json:pre_tool_use:0:0"]
+trusted_hash = "sha256:69b557d3a8ee315125990d4cafa45e595dca97b4a075fc612cb1b6221587b5bf"
+
+[hooks.state."/Users/mizoo/kakusill/.codex/hooks.json:session_start:0:0"]
+trusted_hash = "sha256:68eea747f129762a2d39c850cf48bcdaf4e477d2c1bf355cdb120d01f483279a"
+
+[hooks.state."/Users/mizoo/kakusill/.codex/hooks.json:user_prompt_submit:0:0"]
+trusted_hash = "sha256:4cb82f61832bb9f3c119647153f4df003e46eb619c63baeaa30cfa9a4e2506ec"
+
+[hooks.state."/Users/mizoo/kakusill/.codex/hooks.json:stop:0:0"]
+trusted_hash = "sha256:e9cfa9aef28108934eb5daa5f2c1c618f8a46fe8cec88cd208c500bdb628ddfb"
+
+[hooks.state."pstack@pstack-claude:hooks/hooks.json:session_start:0:0"]
+trusted_hash = "sha256:8a29f014b56214316380198cfeb2f605f332714e095cf63ed873db63b5953509"
+
+[hooks.state."/Users/mizoo/.codex/hooks.json:pre_tool_use:0:0"]
+trusted_hash = "sha256:9dc01e8f35b49d13501305cf6d5f06ae897bb5661a6498e736b8e9d3bc4bfec9"
+
+[hooks.state."/Users/mizoo/.codex/hooks.json:permission_request:0:0"]
+trusted_hash = "sha256:792f93d6854981c37a29c190f171c91f7b0a520620fcf3e74775f24582c799ad"
+
+[hooks.state."/Users/mizoo/.codex/hooks.json:post_tool_use:0:0"]
+trusted_hash = "sha256:2f1a439b7609fae00548534c10d3080aea1f1a174086cb62d5789ecb04771075"
+
+[hooks.state."/Users/mizoo/.codex/hooks.json:session_start:0:0"]
+trusted_hash = "sha256:a8b263fc40d6ee1173f2311d208b616ba7bb5646582a97b93e5fb5931efe13cf"
+
+[hooks.state."/Users/mizoo/.codex/hooks.json:user_prompt_submit:0:0"]
+trusted_hash = "sha256:8d90cd14ea428ce238cef70c70b551ee32725e111791947afb27d95e6fd58292"
+
+[hooks.state."/Users/mizoo/.codex/hooks.json:subagent_start:0:0"]
+trusted_hash = "sha256:707d52da400f60dc193364c456265c50e0431e24ab38ce797d6b52ca4442bc52"
+
+[hooks.state."/Users/mizoo/.codex/hooks.json:subagent_stop:0:0"]
+trusted_hash = "sha256:dd71ee34d7122ea36c255226df40572be8a6024e882d2a541d51284306a73483"
+
+[hooks.state."/Users/mizoo/.codex/hooks.json:stop:0:0"]
+trusted_hash = "sha256:145347407a21f525a9a29c8d481f63db1d8380169e153a849071c0cc5663d429"
+
+[marketplaces.pstack-claude]
+source_type = "git"
+source = "https://github.com/michael-denyer/pstack-claude.git"
+
+[plugins."pstack@pstack-claude"]
+enabled = true
+
+
+[features]
+multi_agent = true

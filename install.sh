@@ -37,7 +37,9 @@ backup_and_link() {
     # Backup existing file/dir if it exists and is not a symlink
     if [ -e "$target" ] && [ ! -L "$target" ]; then
         echo "📋 Backing up $target"
-        [ -d "$target" ] && cp -r "$target" "$BACKUP_DIR/$(basename "$target").backup" || cp "$target" "$BACKUP_DIR/$(basename "$target").backup"
+        # basename だと ~/.codex/config.toml と rtk の config.toml が同じ名前になり後者が上書きする
+        local backup="$BACKUP_DIR/$(echo "${target#$HOME/}" | tr / _).backup"
+        [ -d "$target" ] && cp -r "$target" "$backup" || cp "$target" "$backup"
     fi
     
     # Remove existing file/symlink/dir
@@ -96,6 +98,12 @@ backup_and_link "$DOTFILES_DIR/.cursor/commands" "$HOME/.cursor/commands"
 backup_and_link "$DOTFILES_DIR/.cursor/rules" "$HOME/.cursor/rules"
 backup_and_link "$DOTFILES_DIR/.claude" "$HOME/.claude"
 backup_and_link "$DOTFILES_DIR/.agents" "$HOME/.agents"
+# .codex もディレクトリ全体はリンクしない。auth.json・sessions/・*.sqlite が同居している。
+# config.toml は codex が書き戻すが、書き込みは symlink を辿るので実体側が更新される (2026-09-23 確認)。
+# hooks.json は Orca が生成・管理するので持たない。skills/ は各スキルを ~/.claude/skills へ個別リンク済み。
+backup_and_link "$DOTFILES_DIR/.codex/config.toml" "$HOME/.codex/config.toml"
+backup_and_link "$DOTFILES_DIR/.codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
+backup_and_link "$DOTFILES_DIR/.codex/rules" "$HOME/.codex/rules"
 # opencode: opencode.jsonc と plugins/ をリポジトリで持つ（node_modules は下の mise 節で入れる）
 backup_and_link "$DOTFILES_DIR/.config/opencode" "$HOME/.config/opencode"
 
@@ -151,13 +159,9 @@ RTKPY
     # OpenCode は `rtk init --opencode` で入れない: rtk 0.49.0 の雛形は v1 API
     # (@opencode-ai/plugin) のままで opencode v2 では読めず、しかも上のリンクで入れた
     # v2 版 .config/opencode/plugins/rtk.ts を上書きしてしまう
-    rtk init -g --codex --auto-patch                     # Codex CLI (instructions-only, no hook)
-    # Codex CLI does not expand @-imports in AGENTS.md (verified 2026-08-08), so the
-    # reference rtk writes is dead — inline the instructions plus the review carve-out.
-    if ! grep -q "Rust Token Killer" "$HOME/.codex/AGENTS.md" 2>/dev/null; then
-        cat "$HOME/.codex/RTK.md" >> "$HOME/.codex/AGENTS.md"
-        cat "$DOTFILES_DIR/.config/rtk/codex-agents-exception.md" >> "$HOME/.codex/AGENTS.md"
-    fi
+    # Codex は `rtk init --codex` を使わない: Codex は AGENTS.md の @-import を展開せず
+    # (2026-08-08 確認)、rtk が足す @RTK.md 参照は死んだ行になる。RTK の指示とレビュー時の
+    # 例外は追跡している .codex/AGENTS.md に直書きしてある
     echo "✅ rtk hooks installed"
 else
     echo "⚠️  rtk not found. Skipping rtk setup."

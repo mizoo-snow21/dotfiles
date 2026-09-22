@@ -13,6 +13,7 @@ Personal dotfiles for macOS development environment.
 - **`.config/opencode`** - opencode configuration and its rtk plugin (v2 plugin API)
 - **`.claude`** - Claude Code settings, skills, agents and hooks
 - **`.agents`** - Agent skills installed by the `skills` CLI, with their lockfile
+- **`.codex`** - Codex CLI `config.toml`, `AGENTS.md` and `rules/` (linked per file; `auth.json`, sessions and `hooks.json`, which Orca generates, stay local)
 - **`.cursor`** - Cursor IDE configuration (settings, extensions, commands)
 - **`Brewfile`** - Homebrew packages and casks management
 - **`install.sh`** - Automated installation script
@@ -195,7 +196,7 @@ This will:
   - Claude Desktop/Code: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - Keep API keys secure (not in Git)
 
-CodexはMCP設定を行わず、`~/.codex/config.toml`は別途手動管理します。
+CodexはMCP設定を行いません。`~/.codex/config.toml`はこのリポジトリの`.codex/config.toml`へのsymlinkで、codexが書き戻す変更（プロジェクトの trust など）も実体側に入ります。
 
 ### Adding New MCP Servers
 
