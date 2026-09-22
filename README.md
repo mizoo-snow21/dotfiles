@@ -5,8 +5,14 @@ Personal dotfiles for macOS development environment.
 ## What's Included
 
 - **`.zshrc`** - Zsh configuration with Homebrew and mise integration
-- **`.zprofile`** - Zsh profile with Homebrew environment setup
+- **`.zprofile`** - Zsh profile with Homebrew environment and PATH setup
+- **`.zshenv`** - Environment variables for every zsh (interactive or not)
 - **`.config/mise`** - mise (development environment manager) configuration
+- **`.config/ghostty`**, **`.config/zellij`** - Terminal and multiplexer configuration
+- **`.config/rtk`** - rtk (token-compression proxy) configuration
+- **`.config/opencode`** - opencode configuration and its rtk plugin (v2 plugin API)
+- **`.claude`** - Claude Code settings, skills, agents and hooks
+- **`.agents`** - Agent skills installed by the `skills` CLI, with their lockfile
 - **`.cursor`** - Cursor IDE configuration (settings, extensions, commands)
 - **`Brewfile`** - Homebrew packages and casks management
 - **`install.sh`** - Automated installation script
@@ -68,6 +74,7 @@ cd ~/dotfiles
 - Cloud CLIs managed by mise: AWS CLI, Azure CLI, and Google Cloud CLI
 - Language/runtime tools managed by mise: Python, Node.js, Go, uv, and pnpm
 - Node-based CLIs are declared in mise as well (`"npm:<package>" = "latest"` in `.config/mise/config.toml`): codex, gws, gitnexus, portless, pyright, claude-code-monitor. Do not use a bare `npm install -g` — it disappears on the next Node upgrade and shadows the mise-managed copy on PATH
+- opencode is the one exception: the official curl installer puts it in `~/.opencode/bin` (added to PATH in `.zprofile`) and it updates itself with `opencode upgrade`. Its npm package `@opencode/cli` is too new for mise's `minimumPackageAge` guard, and the Homebrew formula is the v1 line
 - PATH order: `~/.local/bin` is added *before* mise activates, so mise-managed tools win on name collisions (e.g. an installer dropping its own `node` into `~/.local/bin`) and project-level `mise.toml` pins apply as expected
 - Docker Desktop managed by Homebrew cask
 
@@ -121,13 +128,13 @@ mas "App Name", id: 123456789
 ```
 
 ### Updating Package List
-When you install new packages manually, update your Brewfile:
+When you install new packages manually, add them to the Brewfile by hand — it carries
+comments explaining why some tools are deliberately *not* in Homebrew, and
+`brew bundle dump --force` would erase them. `./update.sh` prints the diff between the
+Brewfile and what is actually installed so you can see what to add:
 ```bash
 cd ~/dotfiles
-brew bundle dump --force    # Updates Brewfile with current packages
-git add Brewfile
-git commit -m "Update: Add new packages to Brewfile"
-git push
+./update.sh                 # shows the Brewfile diff, then offers to commit
 ```
 
 ### Installing Packages on New Machine
@@ -142,9 +149,12 @@ cd ~/dotfiles
 ```
 
 This script will:
-- Copy any changed dotfiles from your home directory
-- Update Brewfile with newly installed packages
-- Show you what changed and help you commit/push
+- Show the diff between the Brewfile and the packages actually installed
+- Show you what changed in the repo and help you commit/push
+
+The dotfiles themselves are symlinked from your home directory into this repo, so editing
+`~/.zshrc`, `~/.zprofile`, `~/.zshenv` or anything under `~/.config/mise` etc. already edits
+the tracked file — there is nothing to copy.
 
 ### Manual Update
 When you modify your shell settings or install new packages:
@@ -152,12 +162,10 @@ When you modify your shell settings or install new packages:
 ```bash
 cd ~/dotfiles
 
-# Copy updated files manually (if needed)
-cp ~/.zshrc .
-cp ~/.zprofile .
+# Shell files are symlinks into this repo — edit them in place, nothing to copy
 
-# Update Brewfile with new packages
-brew bundle dump --force
+# Compare the Brewfile with what is installed (do not overwrite it)
+brew bundle dump --force --file=Brewfile.new && diff -u Brewfile Brewfile.new; rm -f Brewfile.new
 
 # Commit and push
 git add .

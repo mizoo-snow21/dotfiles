@@ -85,6 +85,7 @@ echo "📝 Installing dotfiles..."
 
 backup_and_link "$DOTFILES_DIR/.zprofile" "$HOME/.zprofile"
 backup_and_link "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
+backup_and_link "$DOTFILES_DIR/.zshenv" "$HOME/.zshenv"
 backup_and_link "$DOTFILES_DIR/.config/mise" "$HOME/.config/mise"
 backup_and_link "$DOTFILES_DIR/.config/ghostty" "$HOME/.config/ghostty"
 backup_and_link "$DOTFILES_DIR/.config/zellij" "$HOME/.config/zellij"
@@ -94,6 +95,9 @@ backup_and_link "$DOTFILES_DIR/.config/zellij" "$HOME/.config/zellij"
 backup_and_link "$DOTFILES_DIR/.cursor/commands" "$HOME/.cursor/commands"
 backup_and_link "$DOTFILES_DIR/.cursor/rules" "$HOME/.cursor/rules"
 backup_and_link "$DOTFILES_DIR/.claude" "$HOME/.claude"
+backup_and_link "$DOTFILES_DIR/.agents" "$HOME/.agents"
+# opencode: opencode.jsonc と plugins/ をリポジトリで持つ（node_modules は下の mise 節で入れる）
+backup_and_link "$DOTFILES_DIR/.config/opencode" "$HOME/.config/opencode"
 
 echo "✅ Dotfiles installation completed!"
 
@@ -106,6 +110,11 @@ echo "🧰 Installing mise-managed tools..."
 if command -v mise &> /dev/null; then
     mise install
     echo "✅ mise-managed tools installation completed!"
+    # opencode の plugins/rtk.ts は @opencode/plugin を config dir 直下の node_modules から解決する
+    if command -v npm &> /dev/null; then
+        (cd "$DOTFILES_DIR/.config/opencode" && npm install --silent --no-audit --no-fund)
+        echo "✅ opencode plugin dependencies installed"
+    fi
 else
     echo "⚠️  mise not found. Skipping mise tool installation."
 fi
@@ -139,7 +148,9 @@ if p.exists():
         p.write_text(json.dumps(d, indent=2))
         print("  added Shell(rtk) to Cursor allowlist")
 RTKPY
-    rtk init -g --opencode --hook-only --auto-patch      # OpenCode
+    # OpenCode は `rtk init --opencode` で入れない: rtk 0.49.0 の雛形は v1 API
+    # (@opencode-ai/plugin) のままで opencode v2 では読めず、しかも上のリンクで入れた
+    # v2 版 .config/opencode/plugins/rtk.ts を上書きしてしまう
     rtk init -g --codex --auto-patch                     # Codex CLI (instructions-only, no hook)
     # Codex CLI does not expand @-imports in AGENTS.md (verified 2026-08-08), so the
     # reference rtk writes is dead — inline the instructions plus the review carve-out.

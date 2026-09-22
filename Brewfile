@@ -1,3 +1,4 @@
+# opencode も brew に置かない: formula は v1 系。v2 は公式 curl インストーラ（~/.opencode/bin、`opencode upgrade` で自己更新）
 # claude / codex は brew に置かない: claude は native (`claude install`)、codex は mise (npm:@openai/codex) が管理する
 brew "gh"
 brew "mise"
@@ -16,8 +17,8 @@ brew "docker-compose"
 brew "ffmpeg"
 brew "himalaya"
 brew "mas"
-brew "opencode"
 brew "poppler"
+brew "ripgrep"
 brew "tesseract-lang"
 cask "stats"
 cask "rectangle"

@@ -7,51 +7,23 @@ DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "🔄 Updating dotfiles from current system..."
 
-# Function to copy file if it exists and is different
-update_file() {
-    local source="$1"
-    local target="$2"
-    local filename=$(basename "$target")
-    
-    if [[ -f "$source" ]]; then
-        if [[ ! -f "$target" ]] || ! cmp -s "$source" "$target"; then
-            cp "$source" "$target"
-            echo "📝 Updated: $filename"
-        else
-            echo "✅ No change: $filename"
-        fi
-    else
-        echo "⚠️  Not found: $source"
-    fi
-}
-
-# Update dotfiles from home directory
-echo ""
-echo "📁 Updating dotfiles..."
-update_file "$HOME/.zshrc" "$DOTFILES_DIR/.zshrc"
-update_file "$HOME/.zprofile" "$DOTFILES_DIR/.zprofile"
-
-# Update mise configuration
-if [[ -d "$HOME/.config/mise" ]]; then
-    if [[ ! -d "$DOTFILES_DIR/.config/mise" ]] || ! diff -r "$HOME/.config/mise" "$DOTFILES_DIR/.config/mise" > /dev/null 2>&1; then
-        cp -r "$HOME/.config/mise" "$DOTFILES_DIR/.config/"
-        echo "📝 Updated: mise configuration"
-    else
-        echo "✅ No change: mise configuration"
-    fi
-fi
+# .zshrc/.zprofile/.zshenv/.config/* はホームから dotfiles へシンボリックリンクなので
+# コピーは不要 — 編集した時点でリポジトリに反映されている（install.sh の backup_and_link 参照）
 
 # Update Brewfile with current packages
 echo ""
 echo "🍺 Updating Brewfile..."
 cd "$DOTFILES_DIR"
 if brew bundle dump --force --file=Brewfile.new 2>/dev/null; then
-    if [[ ! -f "Brewfile" ]] || ! cmp -s "Brewfile" "Brewfile.new"; then
-        mv "Brewfile.new" "Brewfile"
-        echo "📝 Updated: Brewfile with current packages"
-    else
+    # Brewfile には「なぜ brew に置かないか」等の注記が手書きで入っているので dump で上書きしない。
+    # 差分だけ見せて、取り込むものは手で Brewfile に足す
+    if diff -u Brewfile Brewfile.new > /dev/null; then
         rm "Brewfile.new"
         echo "✅ No change: Brewfile"
+    else
+        echo "📝 Brewfile と実機の差分（必要な行だけ手で Brewfile に反映する）:"
+        diff -u Brewfile Brewfile.new || true
+        rm "Brewfile.new"
     fi
 else
     echo "⚠️  Could not update Brewfile (Homebrew not available)"

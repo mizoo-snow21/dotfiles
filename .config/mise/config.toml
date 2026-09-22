@@ -5,6 +5,8 @@ gcloud = "latest"
 go = "latest"
 node = "latest"
 # claude は宣言しない: native install（`claude install` → ~/.local/bin/claude）で自己更新させる。npm: で入れると自己更新と衝突する
+# opencode は宣言しない: v2 の `@opencode/cli` が mise の minimumPackageAge(30日) に引っかかるため。
+#   公式 curl インストーラで ~/.opencode/bin に入れ（.zprofile で PATH）、更新は `opencode upgrade`（method: curl）
 # codex は self-updater が壊れる（pnpm 誤判定）ので `codex update` ではなく `mise up npm:@openai/codex`（.zshrc で振り替え済み）
 "npm:@openai/codex" = "latest"
 "npm:@googleworkspace/cli" = "latest"

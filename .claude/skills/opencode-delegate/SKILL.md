@@ -1,18 +1,32 @@
 ---
 name: opencode-delegate
-description: Delegate implementation tasks and document reviews to the opencode CLI in headless mode — default model `opencode-go/deepseek-v4.1-flash`. Use when the user says "opencode", "opencode go", "opencodeで実装", "opencodeに投げて", "opencodeに実装させて", or wants an implementer or reviewer other than Cursor/Codex — including when codex is out of quota and a review still has to happen. Read this before writing any `opencode run` command — the headless permission trap, the model roster, and the skill-visibility differences are here.
+description: Default implementer — delegate implementation tasks to the opencode CLI in headless mode, and document reviews when codex is unavailable. Use whenever implementation is dispatched (SDD step 2), when the user says "opencode" / "opencodeで実装" / "opencodeに投げて", or when a review needs a reviewer other than codex. Read this before writing any `opencode run` command — the headless permission trap, the model roster, and the skill-visibility differences are here.
 ---
-
 # opencode Delegate
 
 Claude Code plans, reviews, and owns git. opencode writes the code.
 
-This skill carries **only the opencode-specific deltas**. Prompt construction, the
-verify/commit steps, and the forbidden list are identical to `cursor-delegate` —
-load that skill for the shared workflow rather than duplicating it here, so the two
-never drift apart.
+**opencode is the default implementer** (user directive, 2026-09-22). Cursor is the fallback when
+opencode is blocked — insufficient balance, the per-model China opt-in gate, or a model that will
+not answer. Probe before concluding opencode is down; the failure modes are per-model and the paid
+and free halves fail independently.
 
-Everything below was verified against opencode **1.18.14** on 2026-08-07.
+This skill carries **only the opencode-specific deltas**. Prompt construction, the verify/commit
+steps, and the forbidden list are identical to `cursor-delegate` — load that skill for the shared
+workflow rather than duplicating it here, so the two never drift apart.
+
+Everything below was verified against opencode **v2.0.14** on 2026-09-22 by real dispatches. v2 is
+a different package from the 1.x line (`@opencode/cli`; the official curl installer puts it in
+`~/.opencode/bin` and `opencode upgrade` keeps it current — it lives in neither mise nor brew).
+Commands remembered from 1.x will not run as-is:
+
+| 1.x habit | v2 |
+|---|---|
+| `opencode run --dir <project> …` | `cd <project>` first — there is no `--dir`; the working directory is the project |
+| `"permission":{"external_directory":{"<glob>":"allow"}}` | `"permissions":[{"action":"external_directory","resource":"<glob>","effect":"allow"}]` — an ordered array of rules |
+| `--variant high` | `-m provider/model#high` |
+| `opencode debug skill`, `opencode agent list` | skills: a throwaway dispatch (below); agents: `opencode debug agents` |
+| a private server per command | `--standalone` on every headless run — v2 otherwise attaches to one shared background service |
 
 **Default model: `opencode-go/deepseek-v4.1-flash`** — for implementation, fix rounds, and
 document review alike (user directive, 2026-09-15, superseding the 2026-08-15 `glm-5.3`
@@ -23,10 +37,16 @@ for a reason you can name. `glm-5.3` is the standing second choice when deepseek
 
 | Auto-loaded | Notes |
 |---|---|
-| `AGENTS.md` | Project root, plus global `~/.config/opencode/AGENTS.md`. Verified: a passphrase in `AGENTS.md` came back without the agent reading any file |
-| `~/.claude/skills/*/SKILL.md`, `~/.agents/skills/*/SKILL.md` | Registered as **real skills**, not just files. Unlike Cursor, opencode sees the *whole* `~/.claude/skills` pool. Confirm with `opencode debug skill` |
-| `.opencode/skill(s)/`, `~/.config/opencode/skill(s)/` | opencode-native skills |
-| `opencode.json(c)` | Project (walks up to worktree root) then global `~/.config/opencode/` — deep-merged, project wins |
+| `AGENTS.md` | Project root, plus global `<config dir>/AGENTS.md`. Verified on 1.x: a passphrase in `AGENTS.md` came back without the agent reading any file |
+| `~/.claude/skills/*/SKILL.md`, `~/.agents/skills/*/SKILL.md` | Registered as **real skills**, not just files — all 109 of them on 2026-09-22. Unlike Cursor, opencode sees the *whole* `~/.claude/skills` pool. Confirm with a throwaway `--agent plan` dispatch: "list the exact names of every skill available to you" |
+| `.opencode/skill(s)/`, `<config dir>/skill(s)/` | opencode-native skills |
+| `opencode.json(c)` | Project (walks up to worktree root) then global `<config dir>/opencode.jsonc` — deep-merged, project wins |
+
+The config dir is `~/.config/opencode` (tracked in dotfiles) unless `OPENCODE_CONFIG_DIR` says
+otherwise — and **Orca sets it** to its own hooks directory for every terminal it hosts, so a
+dispatch from an Orca-hosted session reads Orca's `AGENTS.md` and plugins, not the user's
+(`opencode debug paths` shows which). Skills and `OPENCODE_CONFIG_CONTENT` are unaffected; the
+global rtk plugin is the main thing that goes missing.
 
 **Invisible: `CLAUDE.md`, and every plugin skill under `~/.claude/plugins/` (superpowers, ponytail).**
 That second group is the one that bites, because those skills look invocable from this
@@ -40,55 +60,58 @@ or the read is rejected and the dispatch dies.
 
 ## The headless permission trap
 
-Any file read **outside `--dir`** raises an `external_directory` permission request, and
-headless runs auto-reject it:
+Any file read **outside the working directory** raises an `external_directory` permission
+request, and headless runs auto-reject it:
 
 ```
-! permission requested: external_directory (/Users/mizoo/dotfiles/.claude/plugins/…); auto-rejecting
-✗ Read …/test-driven-development/SKILL.md failed
+! permission requested: external_directory (/Users/mizoo/.claude/plugins/cache/…/test-driven-development/*); auto-rejecting
 ```
 
-Observed consequence: the agent stopped there and changed **zero files**. The dispatch looks
-like it ran, and nothing happened.
+Observed consequence, on 1.x and v2 alike: the agent stops there and changes **zero files**. The
+dispatch looks like it ran, and nothing happened.
 
 Fix by injecting a scoped permission for that dispatch — not `--auto`, which approves
 everything the agent asks for:
 
 ```bash
 # ~/.claude is a symlink to ~/dotfiles/.claude and opencode matches on the resolved
-# path, so allow both spellings.
-export OPENCODE_CONFIG_CONTENT='{"$schema":"https://opencode.ai/config.json","permission":{"external_directory":{"'"$HOME"'/.claude/plugins/**":"allow","'"$HOME"'/dotfiles/.claude/plugins/**":"allow"}}}'
+# path, so allow both spellings. `external_directory` alone is enough — no `read` rule needed.
+export OPENCODE_CONFIG_CONTENT='{"permissions":[
+  {"action":"external_directory","resource":"'"$HOME"'/.claude/plugins/**","effect":"allow"},
+  {"action":"external_directory","resource":"'"$HOME"'/dotfiles/.claude/plugins/**","effect":"allow"}]}'
 ```
 
 Scoped to the plugin cache, this only buys read access to skill files the prompt already
 points at. Widen it only for a path the task genuinely needs; a permanent version belongs in
-`~/.config/opencode/opencode.jsonc` (restart required — config is not hot-reloaded).
+`~/.config/opencode/opencode.jsonc`.
 
 **The same trap fires on a mistyped path, and it kills the whole run.** Observed 2026-08-15:
 mid-review the agent reached for
 `/Users/mizoo/mc-morisumorisatei-bit/…` — one letter off from the real
-`mc-mitsumorisatei-bit` — which lands outside `--dir`, raises `external_directory`,
-auto-rejects, and ends the dispatch with the review half-written. Two defences:
+`mc-mitsumorisatei-bit` — which lands outside the working directory, raises
+`external_directory`, auto-rejects, and ends the dispatch with the review half-written. Three
+defences:
 
-- **Give paths in the prompt relative to `--dir`**, not absolute. The agent then has nothing
-  to mistype a prefix onto. (Plugin skills under `~/.claude/plugins/` are the exception —
-  those must stay absolute, which is exactly why they need the permission above.)
-- **Tell the implementer to keep scratch files inside `--dir`** (`test-results/` or similar) and to
-  pass relative paths instead of `cd`-ing. Observed 2026-09-16: a T8 dispatch died at `cd /tmp && curl …`
-  — `/tmp/*` raised `external_directory`, auto-rejected, and the run ended with nothing written.
+- **Give paths in the prompt relative to the working directory**, not absolute. The agent then
+  has nothing to mistype a prefix onto. (Plugin skills under `~/.claude/plugins/` are the
+  exception — those must stay absolute, which is exactly why they need the permission above.)
+- **Tell the implementer to keep scratch files inside the project** (`test-results/` or similar)
+  and to pass relative paths instead of `cd`-ing. Observed 2026-09-16: a T8 dispatch died at
+  `cd /tmp && curl …` — `/tmp/*` raised `external_directory`, auto-rejected, and the run ended
+  with nothing written.
 - **Add the project root itself to `external_directory`** when the run reads widely inside it.
-  It costs nothing (the agent already has `--dir` access to that tree) and converts a typo
-  from a fatal rejection into a harmless failed read the agent can recover from.
+  It costs nothing (the agent already has access to that tree) and converts a typo from a fatal
+  rejection into a harmless failed read the agent can recover from.
 
-**`external_directory` grants writes, not just reads — and `--dir` stops being a boundary.**
-Observed 2026-09-15: a run dispatched with `--dir <repo>/.worktrees/t7-e2e`, holding
-`{"<repo>/**":"allow"}`, wrote its deliverable into the **main** checkout instead of the
-worktree. Both trees matched the glob, so nothing was rejected and nothing was logged. The
-damage is to your own judgement: `git status` in the worktree showed no work, the task looked
-abandoned, and the implementer's truthful "tests pass" report read as a fabrication. **Check
-every tree the glob covers before concluding a run produced nothing.** Scope the grant to the
-paths the run must read (the plugin cache, a sibling spec) and leave the write target to
-`--dir`, or accept that the whole glob is the write surface.
+**`external_directory` grants writes, not just reads — and the working directory stops being a
+boundary.** Observed 2026-09-15: a run started in `<repo>/.worktrees/t7-e2e`, holding
+`<repo>/**` allow, wrote its deliverable into the **main** checkout instead of the worktree.
+Both trees matched the glob, so nothing was rejected and nothing was logged. The damage is to
+your own judgement: `git status` in the worktree showed no work, the task looked abandoned, and
+the implementer's truthful "tests pass" report read as a fabrication. **Check every tree the
+glob covers before concluding a run produced nothing.** Scope the grant to the paths the run
+must read (the plugin cache, a sibling spec) and leave the write target to the working
+directory, or accept that the whole glob is the write surface.
 
 ## Dispatch
 
@@ -106,7 +129,8 @@ python3 -c 'import os,sys;[print(os.path.realpath(p)) for p in sys.argv[1:] if p
 
 TITLE="t3-fix-add-$(date +%H%M)"   # unique — this is how you find the session later
 
-opencode run --dir "<project-dir>" \
+cd "<project-dir>"                  # v2 has no --dir: the working directory is the project
+opencode run --standalone \
   -m opencode-go/deepseek-v4.1-flash \
   --agent build \
   --title "$TITLE" \
@@ -130,29 +154,24 @@ EOF
   slightly over-built code beats blocking on a style reference — drop the line and continue.
 - Both are plugin skills under `~/.claude/plugins/`, which opencode cannot see, so neither
   responds to a name invocation. Only the absolute path works, and reading it needs the
-  `external_directory` permission below. This is the opposite of `~/.claude/skills/*`, which
+  `external_directory` permission above. This is the opposite of `~/.claude/skills/*`, which
   opencode registers as real skills you can name.
+- **`--standalone`** gives the dispatch a private server. Without it v2 attaches every command to
+  one shared background service (`opencode service`), so parallel dispatches and a stale service
+  would share state; every fact in this skill was verified on the standalone path.
 - `< /dev/null` on every invocation, so a backgrounded run can never block on stdin.
-- `--agent build` is the implementer (permission `*: allow`). `--agent plan` is read-only —
-  useful for a look-before-you-leap pass. `opencode agent list` shows the rest.
+- `--agent build` is the implementer (permissions `*: allow`). `--agent plan` is read-only —
+  useful for a look-before-you-leap pass. `opencode debug agents` shows the rest.
 - Report `$TITLE` alongside the task; it is the handle for the fix round.
 
 ## Models
 
 `opencode models` lists what the **active credential** exposes, not the full catalog
 (`opencode auth list` shows which: here a single **OpenCode Go** entry → the `opencode-go/*`
-half). Use `opencode-go/deepseek-v4.1-flash` unless something below applies.
-
-Roster verified 2026-08-07 by sending a trivial prompt to all 18 `opencode-go` models —
-17 answered. Working: `kimi-k3`, `kimi-k2.7-code`, `kimi-k2.6`, `grok-4.5`, `gpt-5.6-luna`,
-`glm-5.2`, `glm-5.1`, `qwen3.8-max`, `qwen3.7-max`, `qwen3.7-plus`, `qwen3.6-plus`,
-`deepseek-v4-pro`, `minimax-m3`, `minimax-m2.7`, `mimo-v2.5-pro`, `mimo-v2.5`, `hy3`.
-
-**The roster grows — re-probe instead of trusting this list.** On 2026-08-15 `opencode models`
-showed **19** `opencode-go` entries, and the new one is **`glm-5.3`**, verified by dispatch
-(`--agent plan`, trivial prompt, answered). It was not in the 2026-08-07 roster above.
-A model missing from this section is not evidence it is unavailable; `opencode models | grep <name>`
-then one throwaway dispatch settles it in seconds.
+half). 30 `opencode-go/*` ids on 2026-09-22, up from 19 in August — the list is the
+environment's job, so read it with `opencode models | grep opencode-go` and probe a candidate
+with one throwaway `--agent plan` dispatch before relying on it. A model missing from an older
+note is not evidence it is unavailable.
 
 **`deepseek-v4.1-flash` is the default for everything** (user directive, 2026-09-15) —
 implementation, fix rounds, and document review. It carried real work on 2026-09-15: a 216-line
@@ -176,10 +195,10 @@ trusting the document's numbers, and found a real defect nine prior rounds had m
   opt-in message was the balance wearing a different mask. It is not, and saying so sent the
   user to the wrong fix.
 - **Disabling models on the OpenCode dashboard does not reach the CLI.** After the user turned
-  several off, all 18 still appeared in `opencode models` and all still answered. Probe, don't
+  several off, all still appeared in `opencode models` and all still answered. Probe, don't
   infer from the web UI.
-- `--variant high` / `max` raises reasoning effort where the provider supports it. Spend it
-  on multi-step refactors, not as a general "be careful" knob.
+- `-m provider/model#high` / `#max` raises reasoning effort where the provider supports it.
+  Spend it on multi-step refactors, not as a general "be careful" knob.
 - `opencode/*-free` models exist for throwaway experiments, not for work you intend to keep.
 
 ### `gpt-5.6-sol` is reachable, just not on this plan
@@ -211,26 +230,28 @@ going somewhere you cannot easily take it back from.
 There is no `create-chat`; the id only exists after the first turn. Two ways to get it:
 
 ```bash
-opencode session list | grep "$TITLE"       # id + title + updated
-# or dispatch with --format json and read .sessionID off any event
+opencode session list --standalone --format json   # scoped to the working directory: id, title, directory
+# or dispatch with --format json — every event carries "sessionID"
 ```
 
 ```bash
 # Fix round — same session, explicit model each time (resuming does not restore it)
-opencode run --dir "<project-dir>" -s "$SID" -m opencode-go/deepseek-v4.1-flash "$(cat <<'EOF'
+cd "<project-dir>"
+opencode run --standalone -s "$SID" -m opencode-go/deepseek-v4.1-flash "$(cat <<'EOF'
 ...review findings to fix, referencing the original task...
 EOF
 )" < /dev/null
 ```
 
 `-c/--continue` targets *the most recent* session, which is ambiguous the moment two
-dispatches run in parallel — use `-s "$SID"`. A session is bound to the `--dir` it was
-created in: once that worktree is removed, `-s` fails at once with `UnknownError … Unexpected server
-error` (observed 2026-09-16) — start a fresh session in the new tree instead of retrying. `--fork` branches a session when you want to
-try a second approach without losing the first.
+dispatches run in parallel — use `-s "$SID"`. A session is bound to the directory it was created
+in (`session list` prints it): once that worktree is removed, `-s` fails at once with
+`UnknownError … Unexpected server error` (observed 2026-09-16) — start a fresh session in the
+new tree instead of retrying. `--fork` branches a session when you want to try a second
+approach without losing the first.
 
-`--format json` also reports `tokens` and `cost` per step, which is the cheapest way to see
-what a dispatch actually spent.
+`--format json` is also where per-step token and cost figures show up (1.x behaviour, not
+re-checked on v2) — the cheapest way to see what a dispatch actually spent.
 
 ## Forbidden items (include in every prompt)
 
