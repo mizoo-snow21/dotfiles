@@ -1,6 +1,6 @@
 ---
 name: cursor-delegate
-description: Delegate implementation tasks to Cursor CLI — headless, or as a visible Orca pane when this session runs inside Orca — routing to Composer 2.5 Fast or Grok 4.6 Fast by whether the task has a right answer and how complex it is. Use when the user says "cursor", "composer", "cursorに実装させて", "cursorで実装", "delegate to cursor", or wants to offload coding work to Cursor's agent.
+description: Fallback implementer — delegate implementation tasks to Cursor CLI when opencode is blocked, headless or as a visible Orca pane when this session runs inside Orca, routing to Composer 2.5 Fast or Grok 4.7 by whether the task has a right answer and how complex it is. Use when the user says "cursor", "composer", "cursorで実装", "delegate to cursor", or when opencode cannot take the task. Also carries the shared delegation workflow (prompt template, verify/commit, forbidden list) that opencode-delegate defers to.
 ---
 
 # Cursor Delegate
@@ -167,7 +167,7 @@ Both halves of the condition earn their place:
 # Route by difficulty FIRST (see Model routing), then mint the session id —
 # every review-fix round needs both.
 MODEL=composer-2.5-fast            # low–medium
-# MODEL=cursor-grok-4.6-high-fast  # high: concurrency, state refactors, shared components, re-dispatch
+# MODEL=grok-4.7-xhigh  # high: concurrency, state refactors, shared components, re-dispatch
 CHAT_ID=$(cursor agent create-chat)
 
 # Prompt goes through a QUOTED heredoc ('EOF', not EOF) — pasted constraints and
@@ -321,18 +321,18 @@ Route with two questions, in this order. Difficulty alone puts "simple but open-
 | Right answer? | Complexity | `--model` | What lands here |
 | --- | --- | --- | --- |
 | Yes | Low | `composer-2.5-fast` | Mechanical edits, adding a field, straightforward test additions, single-file changes whose blast radius is obvious, formatting, constant swaps |
-| Yes | High | `cursor-grok-4.6-high-fast` | Concurrency and race conditions, state-management refactors, contract changes spanning files, shared-component changes |
-| No | Any | `cursor-grok-4.6-high-fast` | UI the spec leaves open, a new module's public shape, review findings that need a judgement call |
+| Yes | High | `grok-4.7-xhigh` | Concurrency and race conditions, state-management refactors, contract changes spanning files, shared-component changes |
+| No | Any | `grok-4.7-xhigh` | UI the spec leaves open, a new module's public shape, review findings that need a judgement call |
 
-**Any re-implementation after a task was sent back goes to `cursor-grok-4.6-high-fast`**, whichever cell the original task sat in.
+**Any re-implementation after a task was sent back goes to `grok-4.7-xhigh`**, whichever cell the original task sat in.
 
-**Write the choice into the task brief: the cell, the model, and the one-line reason** ("Yes / High → `cursor-grok-4.6-high-fast`: three callers of `X` plus interacting state"). Nothing enforces the branch, so the record is the enforcement — it puts the call in front of the reviewer and the user, and a cell you cannot name is a routing decision you did not make.
+**Write the choice into the task brief: the cell, the model, and the one-line reason** ("Yes / High → `grok-4.7-xhigh`: three callers of `X` plus interacting state"). Nothing enforces the branch, so the record is the enforcement — it puts the call in front of the reviewer and the user, and a cell you cannot name is a routing decision you did not make.
 
 **Raising the tier does not replace verification.** Whatever the model, when a task adds a test, inject the bug it claims to catch and confirm it goes RED yourself. Ask for the actual passed/failed counts in the report.
 
 #### Model traps
 
-- **A bare `composer-2.5` (no `-fast`) in an old prompt or script is stale.** Replace it with `composer-2.5-fast`. `cursor-grok-*` ids are NO LONGER stale — see Model routing.
+- **A bare `composer-2.5` (no `-fast`) in an old prompt or script is stale.** Replace it with `composer-2.5-fast`. `cursor-grok-4.6-*` ids are stale too — 4.7 dropped the `cursor-` prefix — see Model routing.
 - **Answer both routing questions before dispatch, not mid-task.** Escalating because a task "feels hard" halfway through wastes the session's context. Judge from the task brief and the blast radius you already measured.
 - **Never pass a Codex model** (`gpt-5.3-codex-high` etc.) as a Cursor `--model`. Codex is the reviewer side. The one place codex appears as an implementer is the quota fallback below, where it runs as its own CLI, not as a Cursor model.
 
@@ -346,7 +346,7 @@ Every Cursor model draws on the **same** plan quota, so on `You're out of usage`
 # Skills under ~/.codex/skills (symlinked from ~/.claude/skills) can also be
 # invoked explicitly with $skill-name in the prompt — but the TDD skill is a
 # plugin skill, NOT in that dir, so the absolute-path read-first instruction stays.
-codex exec -m gpt-6-astra --sandbox workspace-write "$(cat <<'EOF'
+codex exec -m gpt-6-sol --sandbox workspace-write "$(cat <<'EOF'
 ...same prompt you would have given Cursor...
 EOF
 )" < /dev/null
@@ -405,7 +405,7 @@ another `orca terminal send` to the same handle. Everything below is Route A.
 
 ```bash
 # 1. Route by difficulty, then create the session up front (prints a UUID and nothing else)
-MODEL=composer-2.5-fast   # or cursor-grok-4.6-high-fast — see Model routing
+MODEL=composer-2.5-fast   # or grok-4.7-xhigh — see Model routing
 CHAT_ID=$(cursor agent create-chat)
 
 # 2. First implementation into that session (quoted heredoc — same rule as step 3)
@@ -450,6 +450,6 @@ Why mint it instead of recovering it later: `cursor agent ls` is an **interactiv
 | `-p` | Headless output (required for CLI execution) |
 | `--trust` | Trust workspace (required for headless mode) |
 | `--workspace <path>` | Working directory |
-| `--model <id>` | `composer-2.5-fast` or `cursor-grok-4.6-high-fast` — pick by difficulty (see Model routing) |
+| `--model <id>` | `composer-2.5-fast` or `grok-4.7-xhigh` — pick by difficulty (see Model routing) |
 | `--continue` | Continue previous session |
 | `--resume <chatId>` | Resume specific session |
