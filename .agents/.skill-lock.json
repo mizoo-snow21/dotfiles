@@ -326,6 +326,15 @@
       "skillFolderHash": "f0561c41d1f709a953684aef5d5368f8c58d269f",
       "installedAt": "2026-08-29T09:52:10.615Z",
       "updatedAt": "2026-09-03T14:43:55.597Z"
+    },
+    "goal-prompt": {
+      "source": "trailofbits/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/trailofbits/skills.git",
+      "skillPath": "plugins/goal-prompt/skills/goal-prompt/SKILL.md",
+      "skillFolderHash": "863c6a21f6492931e384895b2c81710b688c6b7d",
+      "installedAt": "2026-10-17T02:11:40.594Z",
+      "updatedAt": "2026-10-17T02:11:40.594Z"
     }
   },
   "dismissed": {
