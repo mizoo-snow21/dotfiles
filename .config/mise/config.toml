@@ -1,6 +1,7 @@
 [tools]
 aws-cli = "latest"
-azure-cli = "latest"
+# azure-cli は python を 3.14 に固定: python=latest が 3.15 になると依存の pymsalruntime に cp315 wheel が無く install が落ちる（2026-10）
+azure-cli = { version = "latest", python = "3.14" }
 gcloud = "latest"
 go = "latest"
 node = "latest"
