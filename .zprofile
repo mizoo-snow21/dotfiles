@@ -1,7 +1,8 @@
-# 下の 3 行は Docker Desktop が書いた。マーカー行を消すと次回起動時に再追記されるので原文のまま残す
 # The following lines were added by Docker Desktop to add commands to your PATH.
 export PATH="$PATH:/Users/mizoo/.docker/bin"
 # End of Docker Desktop section.
+
+# 下の 3 行は Docker Desktop が書いた。マーカー行を消すと次回起動時に再追記されるので原文のまま残す
 
 if [ -x /opt/homebrew/bin/brew ]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
