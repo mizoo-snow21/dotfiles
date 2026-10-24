@@ -33,6 +33,10 @@ secrets/
 .claude/paste-cache/
 .claude/plans/
 .claude/projects/
+# claude.ai-synced skills are Anthropic-licensed and named by account UUID
+.claude/skills/synced/
+.claude/skills/.trash/
+.claude/state/
 .claude/session-env/
 .claude/shell-snapshots/
 .claude/statsig/
