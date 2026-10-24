@@ -106,10 +106,10 @@ backup_and_link "$DOTFILES_DIR/.codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
 backup_and_link "$DOTFILES_DIR/.codex/rules" "$HOME/.codex/rules"
 # opencode: opencode.jsonc と plugins/ をリポジトリで持つ（node_modules は下の mise 節で入れる）
 backup_and_link "$DOTFILES_DIR/.config/opencode" "$HOME/.config/opencode"
-# pi もファイル単位でリンクする。~/.pi/agent には auth.json・sessions/・trust.json と
-# インストーラの実体 (install/, bin/) が同居している。settings.json は pi が writeFileSync で
-# その場書きするので symlink を辿って実体が更新される (2026-10-12 pi install/remove で確認)。extensions/rtk.ts は下の rtk 節で生成する
-backup_and_link "$DOTFILES_DIR/.pi/agent/settings.json" "$HOME/.pi/agent/settings.json"
+# pi は AGENTS.md だけリンクする。~/.pi/agent には auth.json・sessions/・trust.json と
+# インストーラの実体 (install/, bin/) が同居している。settings.json は持たない: pi がそこへ
+# deviceId (ChatGPT ログインで端末 ID として送るインストール固有の UUID) を書き、消しても
+# 作り直すため、公開リポジトリに載る (2026-10-12 確認)。extensions/rtk.ts は下の rtk 節で生成する
 backup_and_link "$DOTFILES_DIR/.pi/agent/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
 
 echo "✅ Dotfiles installation completed!"
