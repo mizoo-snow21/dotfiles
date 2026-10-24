@@ -100,6 +100,17 @@
         "hooks": [
           {
             "type": "command",
+            "command": "~/.claude/bin/opencode-delegate-gate.sh",
+            "timeout": 10,
+            "statusMessage": "Checking opencode-delegate skill is loaded..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "~/.claude/bin/cursor-delegate-gate.sh",
             "timeout": 10,
             "statusMessage": "Checking cursor-delegate skill is loaded..."
