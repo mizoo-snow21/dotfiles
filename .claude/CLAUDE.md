@@ -62,6 +62,12 @@ blast radius is non-trivial.
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
 
+## UI/UX
+- Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.
+- Every element must serve a clear user purpose; no slogans, decoration, nested cards, or repeated info.
+- Show explanations only for abnormal states or required actions; put secondary details behind progressive disclosure.
+- Stay consistent with existing screens; prefer removing or simplifying over adding, and don't redesign the whole page to change one part.
+
 ## Agent Roles
 
 - **Claude (Right Brain)**: Primary for writing, design, and creative work. Strong on ideation, weak on rigor — always verify outputs before shipping.
