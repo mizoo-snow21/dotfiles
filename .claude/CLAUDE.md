@@ -171,6 +171,12 @@ blast radius is non-trivial.
 - Commit early and often on the feature branch
 - Only merge to main after all reviews pass and `finishing-a-development-branch` is complete
 
+### Schema & Parallel Work (MUST)
+(user directive, 2026-10-24)
+- In feature/worktree sessions: do NOT create or edit migrations, tables, columns, or schema files.
+- Use existing models only. If schema is missing, stop and propose—do not implement.
+- No git stash. One task = one branch = one PR.
+
 ### Implementation Delegation Rules (Non-Negotiable)
 
 **Commands, flags, model ids, prompt structure, and the forbidden list all live in the delegate skills — `Skill(opencode-delegate)` for the default path, `Skill(cursor-delegate)` for the fallback and for the shared workflow both paths use.** Below is only local policy the skills do not carry.
@@ -181,7 +187,7 @@ blast radius is non-trivial.
 - **1 task = 1 fresh session** — never batch multiple tasks into one invocation
 - **Parallel Implementation Rule — independent tasks run in parallel, dependent ones stay ordered** (user directive, 2026-08-08). `superpowers:subagent-driven-development` lists "dispatch multiple implementation subagents in parallel" as a Red Flag, but its stated reason is conflicts — so **this local rule overrides it only where conflict is structurally impossible**. Dispatch in parallel only when ALL of the following hold:
   1. **Disjoint file sets** — declared per task in the plan, and the pre-dispatch impact analysis blast radii do not overlap either
-  2. **No ordering dependency and no shared-contract change** — tasks touching proto / migrations / shared env / shared entities always run serially
+  2. **No ordering dependency and no shared-contract change** — tasks touching proto / migrations / shared env / shared entities always run serially, and schema changes ship in their own dedicated PR
   3. **1 task = 1 worktree** (`superpowers:using-git-worktrees`) — one working tree means one HEAD, so committing task A moves the BASE..HEAD range task B's review is scoped to, and any `git add -A` sweeps another session's half-written files
   4. **Each worktree gets its own test-environment namespace** — container project name, host ports, database. A separate directory does NOT separate fixed ports; two `make e2e` runs collide regardless of how disjoint the source files are. For the web dev server, start it through portless (`portless run pnpm dev` inside the worktree) — each worktree gets its own `https://<worktree>.<project>.localhost` and a free port, so 3000 is never contended; a bare `pnpm dev` still takes 3000. portless does not separate DB / containers / auth-callback URLs pinned to `localhost:3000` — those still need their own namespace
   Miss any one of them and it runs serially. Even in parallel, Task Review is one dispatch per task (never batched), and announce how many sessions were dispatched at launch
