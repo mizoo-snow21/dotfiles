@@ -13,10 +13,18 @@ skill_loaded() {
 
 # dispatch (`opencode run`) だけを対象。models / auth / session list / agent list /
 # debug skill は素通し — セッション id の取得や疎通確認を妨げないため。
-case "$cmd" in
-  *"opencode run"*) ;;
-  *) exit 0 ;;
-esac
+# 実行されない部分（heredoc の本文、引用符の中）を消してから、残りに opencode run が語として
+# 現れるかを見る。文字列として触れているだけのコミットメッセージや grep まで止めていたため。
+# ponytail: 簡易な字句処理で、シェルの構文解析はしない。見逃すのは、引用符の中の dispatch
+# （bash -c '…'、"$(…)"）と、引用符やコメントの中の <<WORD に続く行。引用符なしで書いた語
+# （echo opencode run、# opencode run）は止める。どれも実際の dispatch の形では起きない。
+code=$(printf '%s\n' "$cmd" | awk '
+  skip { if ($0 ~ "^\t*" delim "$") skip = 0; next }
+  match($0, /<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_]*/) {
+    delim = substr($0, RSTART, RLENGTH); sub(/^<<-?[ \t]*["\047]?/, "", delim); skip = 1
+  }
+  { print }' | tr '\n' ' ' | sed -E "s/'[^']*'|\"([^\"\\\\]|\\\\.)*\"/ /g")
+printf '%s' "$code" | grep -Eq '(^|[^[:alnum:]_.-])opencode([[:space:]]|\\)+run([[:space:]]|$)' || exit 0
 
 skill_loaded "opencode-delegate" && exit 0
 
