@@ -1,0 +1,3 @@
+# プロジェクトの python は uv が持つ（`uv python pin <ver>` → .python-version）。
+# PATH 上の mise の python は拾わない。mise 側は .python-version を読まない設定（mise/config.toml）。
+python-preference = "only-managed"

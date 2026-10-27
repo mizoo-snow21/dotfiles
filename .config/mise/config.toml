@@ -21,4 +21,5 @@ terraform = "latest"
 uv = "latest"
 
 [settings]
-idiomatic_version_file_enable_tools = ["python"]
+# .python-version は uv が読む（プロジェクトの python は uv が持つ）。mise の python はプロジェクト外の既定だけ。
+idiomatic_version_file_enable_tools = []
