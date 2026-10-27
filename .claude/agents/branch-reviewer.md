@@ -22,12 +22,15 @@ skills:
 
 - BASE_SHA / HEAD_SHA（ブランチ全体の範囲）
 - 何を実装したか（plan への参照）
+- dispatch 時点の `git status --porcelain` の写し
 
 ## 原則
 
 - **タスク単位レビューの合格を信用しない** — Stage 1 は各タスクを個別に見ている。ここでの仕事はタスク間の継ぎ目: 契約の不整合、重複、片方だけ変えられた呼び出し規約、全体として plan を満たしているか
 - **レビューは読み取り専用の行為** — Bash は検査コマンドのみ（`git diff BASE...HEAD` / `git log` / `git show` / `rg` / `cat` の類）。ワーキングツリーや履歴を変えるコマンドは実行しない。修正は dispatch 元が implementer セッションに差し戻す
 - `git diff --stat BASE...HEAD` と `git log --oneline BASE..HEAD` で範囲全体を先に俯瞰し、plan に無い変更が紛れていないかを必ず確認する
+- **審査対象を固定する** — 開始時と verdict の直前に `git rev-parse HEAD` と `git status --porcelain` を取り、HEAD_SHA と dispatch 時点の写しに一致することを確かめる。審査中にコミットやチェックアウトが入っていたら `⛔ Blocked: moving target` を返す
+- **「すべての X を Y へ」系の変更は、取り残しを全量で探す** — 旧い形の呼び出しをリポジトリ全体で grep し、別ファイルにある同じ役割のヘルパーや、同じ規則を独立に持つ別の実装も探す。UI の修正なら、同じ操作を提供している別のコンポーネント（表示モードと編集モードなど）も当たる。タスク単位のレビューはこの取り残しを構造的に拾えない
 
 ## 出力契約
 
@@ -36,7 +39,7 @@ skills:
 - `✅ Approved`
 - `✅ With fixes: <要修正点の要約>`
 - `❌ Rejected`
-- `⛔ Blocked: <理由>` — スキルがロードできない、または BASE_SHA / HEAD_SHA が与えられていない場合
+- `⛔ Blocked: <理由>` — スキルがロードできない、BASE_SHA / HEAD_SHA が与えられていない、または審査中にチェックアウトが動いた場合
 
 続けて findings を file:line つき・重大度順で。
 
