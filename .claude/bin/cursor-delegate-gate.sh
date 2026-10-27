@@ -19,14 +19,17 @@ skill_loaded() {
 
 # 実際の dispatch (-p / --print) だけを対象にする。
 # create-chat / ls / models / status / --help は素通し: chatId の発行を妨げないため。
-case "$cmd" in
-  *"cursor agent"*|*"cursor-agent"*) ;;
-  *) exit 0 ;;
-esac
-case "$cmd" in
-  *" -p "*|*" -p"|*"--print"*) ;;
-  *) exit 0 ;;
-esac
+# 実行されない部分（heredoc の本文、引用符の中）を消してから判定する。文字列として触れている
+# だけのコミットメッセージやレポートの heredoc まで止めていたため。消し方と見逃す形
+# （bash -c '…' の中の dispatch など）は opencode-delegate-gate.sh と同じ。
+code=$(printf '%s\n' "$cmd" | awk '
+  skip { line = $0; sub(/^\t+/, "", line); if (line == delim) skip = 0; next }
+  match($0, /<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_.-]*/) {
+    delim = substr($0, RSTART, RLENGTH); sub(/^<<-?[ \t]*["\047]?/, "", delim); skip = 1
+  }
+  { print }' | tr '\n' ' ' | sed -E "s/'[^']*'|\"([^\"\\\\]|\\\\.)*\"/ /g")
+printf '%s' "$code" | grep -Eq '(^|[^[:alnum:]_.-])cursor([[:space:]]+|-)agent([[:space:]]|$)' || exit 0
+printf '%s' "$code" | grep -Eq '[[:space:]](-p|--print)([[:space:]]|$)' || exit 0
 
 skill_loaded "cursor-delegate" && exit 0
 

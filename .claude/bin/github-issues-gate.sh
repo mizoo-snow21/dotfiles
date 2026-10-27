@@ -29,7 +29,7 @@ skill_loaded() {
 # （bash -c '…'、"$(…)"）、引用符で囲んだコマンド語（"gh" issue create）、引用符の中の
 # <<WORD に続く行。どれも実際の作成の形では起きない。
 commands=$(printf '%s\n' "$cmd" | awk '
-  skip { if ($0 ~ "^\t*" delim "$") skip = 0; next }
+  skip { line = $0; sub(/^\t+/, "", line); if (line == delim) skip = 0; next }
   match($0, /<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_.-]*/) {
     delim = substr($0, RSTART, RLENGTH); sub(/^<<-?[ \t]*["\047]?/, "", delim); skip = 1
   }

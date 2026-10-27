@@ -19,7 +19,7 @@ skill_loaded() {
 # （bash -c '…'、"$(…)"）と、引用符やコメントの中の <<WORD に続く行。引用符なしで書いた語
 # （echo opencode run、# opencode run）は止める。どれも実際の dispatch の形では起きない。
 code=$(printf '%s\n' "$cmd" | awk '
-  skip { if ($0 ~ "^\t*" delim "$") skip = 0; next }
+  skip { line = $0; sub(/^\t+/, "", line); if (line == delim) skip = 0; next }
   match($0, /<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_.-]*/) {
     delim = substr($0, RSTART, RLENGTH); sub(/^<<-?[ \t]*["\047]?/, "", delim); skip = 1
   }
