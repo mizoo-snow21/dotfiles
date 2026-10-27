@@ -16,6 +16,7 @@ check deny  'cd /tmp/p && opencode run -m x "do it"'
 check deny  'env OPENCODE_X=1 ~/.local/bin/opencode run -m x "do it"'
 check deny  $'opencode \\\n  run -m x "do it"'
 check deny  $'opencode run -s "$SID" -m x "$(cat <<\'EOF\'\ndo it\nEOF\n)"'
+check deny  $'cat > r.md <<\'END-REPORT\'\nnotes\nEND-REPORT\nopencode run -m x "do it"'
 check allow 'git commit -m "fix; opencode run gate"'
 check allow $'git commit -F - <<\'EOF\'\nopencode run gate\nEOF'
 check allow "grep -n 'opencode run' SKILL.md"

@@ -20,7 +20,7 @@ skill_loaded() {
 # （echo opencode run、# opencode run）は止める。どれも実際の dispatch の形では起きない。
 code=$(printf '%s\n' "$cmd" | awk '
   skip { if ($0 ~ "^\t*" delim "$") skip = 0; next }
-  match($0, /<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_]*/) {
+  match($0, /<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_.-]*/) {
     delim = substr($0, RSTART, RLENGTH); sub(/^<<-?[ \t]*["\047]?/, "", delim); skip = 1
   }
   { print }' | tr '\n' ' ' | sed -E "s/'[^']*'|\"([^\"\\\\]|\\\\.)*\"/ /g")
