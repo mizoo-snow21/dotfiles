@@ -30,7 +30,8 @@ If a skill is unregistered or broken and cannot be loaded, **do not substitute f
 | **Why is it built this way** (origin of a design decision / where a regression started / postmortem) | `pstack:why` |
 | Driving an open PR to green (red CI, review comments) without re-prompting | `pstack:babysit` |
 | Long autonomous runs / work the user steps away from (`/loop`, "while I sleep") | `pstack:show-me-your-work` |
-| Editing CLAUDE.md / AGENTS.md / any SKILL.md | `writing-for-agents` |
+| Creating a new skill, or evaluating / benchmarking one | `skill-creator` |
+| Editing the text of CLAUDE.md / AGENTS.md / any SKILL.md | `writing-for-agents` |
 | Stress-testing a settled plan round by round with codex, before `codex-review` | `grilling` |
 | Force-pushing, merging, rebasing, removing a worktree, or judging a branch merged or pushed | `git-safety` |
 | Fetching a secret, credential, or API key from a secret store | `secret-handling` |
