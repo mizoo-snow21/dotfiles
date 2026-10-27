@@ -15,6 +15,10 @@ GitHub stores files dragged into a comment box under `user-attachments`, address
 
 The trade-off worth naming: attachments live in GitHub, not in your repo. If the requirement is that evidence be version-controlled alongside the code and survive a migration off GitHub, commit the file instead and reference it as `raw.githubusercontent.com/<owner>/<repo>/<full-sha>/<path>` — use the commit SHA, never a branch name.
 
+## Check the seed before you capture
+
+If you seeded the data by hand, confirm it obeys the invariants the code guarantees — columns that always match, combinations production cannot produce. An impossible seed makes a correct implementation look broken in the screenshot, or hides a real bug, and the screenshot is what the reviewer judges.
+
 ## Upload
 
 Use the bundled script. It uploads, verifies the served byte count matches the source, and prints ready-to-paste Markdown:

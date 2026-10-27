@@ -54,10 +54,28 @@ agy -p "<prompt>" \
 - **Always pair it with `--sandbox`.** The flag above auto-approves every tool, so shut the terminal
   down. Fixing prose needs no shell
 - Append `</dev/null`, or the process hangs waiting on input
-- Default to `gemini-3.8-flash-high`. Reserve `gemini-3.1-pro-high` for drafts going outside
+- Use `gemini-3.8-flash-high` for every draft, outward-facing ones included. agy offers no
+  `gemini-3.1-pro-*` and exits with "not recognized" if you ask for one
 - Claude Code's auto-mode classifier sometimes refuses this command over the flag name, and the
-  decision is inconsistent. Do not fire the same command again — write the prompt to a file and ask
-  the user to run it with `!`
+  decision is inconsistent. Do not fire the same command again — say what blocked it and ask the
+  user whether you may run it; their explicit go-ahead lets the same command through
+
+### Text inside code, and long text
+
+Hand agy prose, never a code file. Given a whole slide build script (~43KB, mostly code), it
+edited ~3KB per model turn and hit `--print-timeout` with no reply — no read-back, no punch list.
+Even plain strings stall in bulk: 258 lines timed out with no edits. What works:
+
+1. Extract the strings agy should touch into a file, one ID per string
+2. Run it on chunks of about 60 lines, telling it to write only the changed lines, as
+   `ID<TAB>修正<TAB>理由`, to a new file. Chunks can run in parallel
+3. Use the first and last ID of the chunk as the read-back
+4. Map the changes back yourself, then diff and compile/run the source
+
+For text with a fixed register (a client deck), name what stays — です・ます, established labels,
+quoted text — or the uniform-endings rule fights the register. Review every changed string for
+lost meaning: when shortening, agy drops specifics. A full deck pass can use up agy's weekly
+quota (`Individual quota reached … Resets in <N>h`), so send only the text that needs it.
 
 ## Prompt shape
 
@@ -156,8 +174,8 @@ text yourself. That part cannot be delegated.
 
 ## Out of scope
 
-- **Not for writing code** — implementation goes to Cursor (`cursor-delegate`). This skill covers
-  Japanese prose only
+- **Not for writing code** — implementation goes to the delegated implementer
+  (`opencode-delegate`, falling back to `cursor-delegate`). This skill covers Japanese prose only
 - **Not for English** — `stop-slop` and `humanizer` cover that
 - **Not for a few lines in chat** — read `stop-ai-slop-jp` and fix them yourself, it is faster
 - **No git or gh operations** — commit, push, and anything touching GitHub stay with Claude Code.

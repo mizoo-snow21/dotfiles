@@ -1,6 +1,6 @@
 ---
 name: opencode-delegate
-description: Default implementer — delegate implementation tasks to the opencode CLI in headless mode, and document reviews when codex is unavailable. Use whenever implementation is dispatched (SDD step 2), when the user says "opencode" / "opencodeで実装" / "opencodeに投げて", or when a review needs a reviewer other than codex. Read this before writing any `opencode run` command — the headless permission trap, the model roster, and the skill-visibility differences are here.
+description: Default implementer — delegate implementation tasks to the opencode CLI in headless mode; also runs document reviews with a non-codex reviewer. Use whenever implementation is dispatched (SDD step 2), when the user says "opencode" / "opencodeで実装" / "opencodeに投げて", or when a review needs a reviewer other than codex. Read this before writing any `opencode run` command — the headless permission trap, the model roster, and the skill-visibility differences are here.
 ---
 # opencode Delegate
 
@@ -85,6 +85,11 @@ Scoped to the plugin cache, this only buys read access to skill files the prompt
 points at. Widen it only for a path the task genuinely needs; a permanent version belongs in
 `~/.config/opencode/opencode.jsonc`.
 
+**Go tasks genuinely need the module cache.** The agent reads dependency sources there, and
+without a grant the run died mid-implementation with 8 files half-written (2026-09-17). Add
+`{"action":"external_directory","resource":"<output of go env GOMODCACHE>/**","effect":"allow"}`
+to the array up front.
+
 **The same trap fires on a mistyped path, and it kills the whole run.** Observed 2026-08-15:
 mid-review the agent reached for
 `/Users/mizoo/mc-morisumorisatei-bit/…` — one letter off from the real
@@ -98,7 +103,10 @@ defences:
 - **Tell the implementer to keep scratch files inside the project** (`test-results/` or similar)
   and to pass relative paths instead of `cd`-ing. Observed 2026-09-16: a T8 dispatch died at
   `cd /tmp && curl …` — `/tmp/*` raised `external_directory`, auto-rejected, and the run ended
-  with nothing written.
+  with nothing written. Write this into the work steps, not only the Forbidden list, and order
+  the steps **report first, cleanup last**: two runs that had passed every gate died on a final
+  `rm -f /tmp/…` before writing their report (2026-09-16). A missing report is one `-s` resume
+  away — ask for the report only.
 - **Add the project root itself to `external_directory`** when the run reads widely inside it.
   It costs nothing (the agent already has access to that tree) and converts a typo from a fatal
   rejection into a harmless failed read the agent can recover from.
@@ -191,6 +199,9 @@ trusting the document's numbers, and found a real defect nine prior rounds had m
   between 02:17 and 09:04 on 2026-09-15, mid-session, with nothing changed locally. The catalog
   cache carries no region field, so there is no way to predict it; probe. Clearing it is a
   one-click opt-in on the workspace page in the error message, which only the account owner can do.
+- **The usage limit is silent.** At the limit `opencode run` returned no error — 0-byte output,
+  process alive, CPU flat — and two 15-minute waits went to a "heavy task" that was a limit
+  (2026-08-07, 1.x; not re-checked on v2). Probe as in `cursor-delegate` → "Long and silent runs".
 - **Do not explain one failure with the other.** An earlier version of this note claimed the
   opt-in message was the balance wearing a different mask. It is not, and saying so sent the
   user to the wrong fix.
@@ -207,13 +218,14 @@ The catalog cache (`~/.cache/opencode/models.json`) carries `gpt-5.6-sol` under 
 `github-copilot` and `openrouter` providers — but **not** under `opencode-go`, so
 `--model opencode-go/gpt-5.6-sol` returns a 500. Adding an OpenAI / Copilot / OpenRouter
 credential with `opencode auth login` would make `--model openai/gpt-5.6-sol` work. Until then
-sol lives only in the codex CLI, and when codex hits its usage limit the review still has to
-run — that is what the deepseek default is for.
+sol lives only in the codex CLI.
 
 ## Document review
 
-The same dispatch works for reviewing a document (a plan, a spec, a manual chapter) when
-`codex-review`'s sol is unavailable. Two differences from an implementation dispatch:
+The same dispatch works for reviewing a document (a plan, a spec, a manual chapter) when the
+review needs a reviewer outside codex. For a plan / spec / todo doc whose codex review hit the
+usage limit, CLAUDE.md §3 routes to `pstack:interrogate` instead. Two differences from an
+implementation dispatch:
 
 - `--agent plan` instead of `build` — the reviewer has no business editing files, and read-only
   removes the whole class of "the reviewer helpfully fixed it" surprises.
@@ -255,12 +267,10 @@ re-checked on v2) — the cheapest way to see what a dispatch actually spent.
 
 ## Forbidden items (include in every prompt)
 
-- git commit / push / branch operations
-- Creating or modifying files not related to the task
-- Changing auth settings or secrets
-- Adding or updating dependencies
-- Running dev server / build / deploy
-- Updating planning or progress tracking files
+`cursor-delegate` → "Default forbidden items", verbatim — one list, so the two never drift.
+**Put the git line at the top of the prompt, before the Task.** Listed last, it did not stop
+opencode from running `git stash` / `git stash pop` and unpacking another task's shared stash
+with conflicts into the tree; moved to the top, it held in every later round (2026-08-18).
 
 ## Verify, then commit
 

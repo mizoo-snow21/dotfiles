@@ -25,7 +25,10 @@ python3 "$SKILL_DIR/scripts/scan_mail.py" scan
 
 - Default range is January 1 of the current year (or since the last scan when state
   exists). Add `--since YYYY-MM-DD` only when the user specifies a range.
-- If the output JSON's `candidates` is empty, report "no new candidates" and go to step 4.
+- If the output JSON's `candidates` is empty, report it with the window you scanned — "no
+  unprocessed candidates since <last scan time>" — and go to step 4. `scan` drops everything
+  already in sources/uploaded/discarded, so zero candidates means nothing new to process, not
+  that no payment mail exists.
 
 ### 2. Classify and get approval (mandatory gate)
 
@@ -73,11 +76,14 @@ python3 "$SKILL_DIR/scripts/mf_api.py" upload <saved files>...
   filter. It matches on **substring, case-insensitively** (verified: `--name cursor`
   returns `20260812_cursor_SCB7FYAO-0022_8.98usd.pdf` and friends), so a full filename
   finds the exact file and a fragment — a vendor, an invoice number, a date — finds a
-  family of them. Always dedupe this way, never by pulling an inventory and scanning it:
-  the Box list endpoint caps `limit` at 100 and has no offset or page parameter, so once
-  Box holds more than 100 files you simply cannot see the older ones. A listing that comes
-  back without your file therefore proves nothing.
-  `list-box` refuses `--limit` above 100 rather than letting the API 400 silently.
+  family of them. Always dedupe this way: a bare `list-box` (no `--name`) sends a single
+  request and returns at most the newest 100 files, so a listing that comes back without
+  your file proves nothing. `list-box` refuses `--limit` above 100 rather than letting the
+  API 400 silently.
+  A full inventory (e.g. Box files no journal references) needs the paging the endpoint does
+  have and `list-box` does not use yet: `GET /v1/files?limit=100&page=N`, following
+  `pagination.next_page` until it is `null`. Listings include trashed files — drop
+  `is_trashed: true` before counting anything.
   That substring behaviour is also how you answer "do we already have anything from this
   vendor?" before concluding a receipt was never collected — search Box by vendor name
   first, because a past run may have put it there by a route the state file never recorded.
@@ -237,9 +243,12 @@ only through the auto-journal candidate screens.)
 
 ### 5. Error handling
 
-- `refresh token expired` → generate a URL with `mf_api.py auth-url` and show it to the
-  user → after they approve in the browser, have them paste the `localhost:3118` error
-  page URL and run `mf_api.py auth-exchange "<callback_url>"`.
+- `refresh token expired` → first check whether two `mf_api.py` processes ran at once. Every
+  refresh rotates the refresh token and writes the new one to the Keychain, so a parallel
+  call fails this way while the credentials are fine — re-run it alone. Keep every MF API
+  call serial. Only if it fails alone: generate a URL with `mf_api.py auth-url` and show it
+  to the user → after they approve in the browser, have them paste the `localhost:3118`
+  error page URL and run `mf_api.py auth-exchange "<callback_url>"`.
 - Envelope Index unreadable / FDA not granted → tell the user to grant Full Disk Access
   to the terminal app (Ghostty etc.) in System Settings > Privacy & Security.
 - Extraction failures → follow the stderr table in step 3 (rescan / retry / open the
@@ -313,8 +322,11 @@ first so you don't duplicate a fed charge.
 number: `pdftotext -layout <pdf> | grep -Eo 'T[0-9]{13}'`. A T-number on the receipt is a
 strong signal the vendor is registered (often → 課仕10%適格, full credit; e.g. Anthropic
 T7700150134388, O'Reilly T7011101004246); its absence on a foreign receipt is a signal it
-may be non-qualified (often → 課仕10% 80%控除 経過措置; e.g. Anomaly, VoiceInk/Polar). This is
-only a starting heuristic: a registration number alone doesn't settle invoice
+may be non-qualified (often → 課仕10% with the 経過措置 partial credit; e.g. Anomaly,
+VoiceInk/Polar). The credit rate follows the date of the purchase itself: 80%
+(`INVOICE_KIND_UNQUALIFIED_80`) through 2026-09-30, 70% (`INVOICE_KIND_UNQUALIFIED_70`) from
+2026-10-01. A missing T-number shows only that *this document* fails the qualified-invoice
+requirements, not that the vendor is unregistered. This is only a starting heuristic: a registration number alone doesn't settle invoice
 eligibility, and foreign / digital-service purchases (電気通信利用役務, reverse-charge,
 whether it's even a 国内取引) can need an entirely different consumption-tax treatment.
 Surface the number and your guess, and confirm the actual 税区分 with the user / their
@@ -352,9 +364,18 @@ only the ones they confirm. (Real case: eight GO taxi receipts arrived in one ba
 of the matching feed rows were 対象外, and only the two the user confirmed as business were
 cleared — the third had no receipt and stayed excluded.)
 
-**`putJournals` preserves `voucher_file_ids`.** The parameter doesn't exist on the schema,
-yet attached evidence survives an update (verified). So fixing an existing AI-OCR journal's
-貸方 or 税区分 through the API is safe and does not detach its receipt.
+*Setting* rows the other way is where the UI stalls. The 対象外 button on 連携サービスから入力 and
+the 実現 button in 仕訳帳 raise native confirm dialogs that freeze the automated click (30 s CDP
+timeout); overriding `window.confirm` and 一括対象外 are both refused by the auto-mode classifier.
+Confirm on screen that the rows match the agreed list, then ask the user to press the button
+(and each dialog's OK — 実現 asks twice), and re-read the statuses through the API afterwards.
+
+**`putJournals` preserves `voucher_file_ids` and `transaction_id`.** Neither parameter exists
+on the schema, yet attached evidence and the feed link both survive an update (verified). So
+fixing an existing AI-OCR journal's 貸方 or 税区分 through the API is safe and does not detach
+its receipt, and a journal created from the feed can afterwards be split (e.g. 貸方 into 未払金
++ 事業主借) without losing its transaction. Like `postJournals` it takes **gross** amounts:
+echoing back the tax-exclusive value `getJournals` returned shrinks the journal.
 
 **But `putJournals` replaces the branch wholesale — anything you omit is erased.** Evidence
 survives; everything inside `branches` does not. Leave out `sub_account_id` and the 補助科目
@@ -390,7 +411,7 @@ taxis buries the real 取引先 and, more importantly, the registration number i
 記載事項** (the 仕入税額控除 book requirements are 相手方名称 / 取引年月日 / 取引内容 / 対価の額;
 the number only has to be on the retained 領収書). What actually drives the tax calculation
 is each journal's `invoice_kind` (`INVOICE_KIND_QUALIFIED` / `_UNQUALIFIED_80` /
-`_NOT_TARGET`) — set that, and keep the receipt in Box.
+`_UNQUALIFIED_70` / `_NOT_TARGET`) — set that, and keep the receipt in Box.
 
 **Attaching (UI):** 仕訳帳 → paperclip in the 証憑 column → panel → ファイルを追加 →
 クラウドBoxから選択 → filter (substring match; use the receipt number e.g. `2235-8792` or the
@@ -434,9 +455,22 @@ automatically a compliant qualified invoice. Book it as sales (借 売掛金 / �
 at the supply's actual 税区分 — commonly 課税売上10%, but confirm it isn't 軽減8%, 非課税,
 免税(輸出), or 対象外 before posting — and keep it in Box (電帳法, 授受区分 = 受領). 見積書/契約書 are not evidence; personal
 buys are skipped. Recognize 売上 on 発生主義 (役務提供完了), not on receipt — but first check
-how the book already records sales: this user's bank feed auto-posts 借 普通預金 / 貸 売上金
-at receipt, so a manual 売掛金 accrual would double-count at payment. Match the book's
-existing sales account name (here **売上金**, not 売上高).
+how the book already records sales, and match its existing sales account name.
+
+**With MF請求書 connected, sales are already booked from the invoice — never from the
+deposit.** Issuing an invoice creates a pair of BILLING journals (`entered_by:
+JOURNAL_TYPE_BILLING`): 借 売掛金 / 貸 売上高 on the invoice date, and 借 普通預金 / 貸 売掛金
+(未実現) on the due date. Both carry `transaction_id: null`, so the bank feed's deposit row
+stays 未仕訳 for good; journalizing it books the deposit twice — leave it or mark it 対象外.
+Three more traps around the pair:
+- If sales look missing, open 自動で仕訳 → 請求書から入力: with the invoice auto-journal setting
+  on 仕訳候補を確認する, BILLING journals wait there as candidates and never reach the ledger.
+  Candidates can include invoices already booked by hand, so register them one at a time
+  after checking each against `getJournals`, never by select-all.
+- `create_time` is when the journal was written, not the transaction date — diagnose by the
+  journal's own date, over a full-period `getJournals`.
+- Deleting an invoice in MF請求書 leaves both journals in the ledger. Delete them in 仕訳帳;
+  removing one takes its pair with it.
 
 ## Vendors whose receipts never arrive as an attachment
 
@@ -451,7 +485,9 @@ is true of anything billed through a web account.
 Ask the ledger, not your memory of which vendors are troublesome. Pull the year's journals,
 keep the ones where `voucher_file_ids` is empty, and group them by vendor: a vendor appearing
 repeatedly with no evidence is almost certainly dashboard-only. Cross-check by asking Mail
-whether that sender has *ever* sent an attachment — if every message from them has zero
+whether that vendor has *ever* sent an attachment — search by subject as well as sender, since
+many vendors' receipts come from a payment processor (Stripe) rather than their own domain, and
+a sender-only search reports "no mail" for them. If every message from them has zero
 attachments, no amount of re-scanning will help, and the answer is to go to their website.
 
 Run this sweep at the end of a session, not just when someone asks. It is the only thing that
@@ -464,7 +500,11 @@ Check, in this order:
 
 1. **Box**, by vendor substring (`list-box --name <vendor>`). A previous run may have put it
    there by a route the state file never recorded, and the substring search finds it whatever
-   naming convention that run used.
+   naming convention that run used. When the name carries no vendor or amount (`電帳法_*.pdf`
+   from AI-OCR), search by **amount** in the UI instead: 仕訳帳 → 証憑 paperclip → クラウドBoxから
+   選択, 添付 = 全て, amount filter. It matches the amount MF extracted from the file, not the
+   filename. Only the lower bound of the range takes effect, and the API (`GET /v1/files/{id}`)
+   returns no amount at all.
 2. **`~/.local/state/mail2mf/`** — sibling directories hold files pulled from outside Mail,
    each with a JSON manifest recording drive/vendor id, md5, and the resulting Box file id.
 3. **`~/Downloads`**, for a ZIP or PDF a previous session or the user already fetched.
@@ -523,6 +563,8 @@ new vendor turns out to be dashboard-only.
 |---|---|---|
 | Cursor (Anysphere) | cursor.com → Billing & Invoices → Download → **All invoices** | ZIP of every invoice + `manifest.csv`; invoice no. `SCB7FYAO-00NN` only inside the PDF; 適格請求書ではない（登録番号の印字なし） |
 | OpenAI | platform.openai.com → billing history | The browser extension refuses this domain on policy, so the user has to download it. Note that a ChatGPT plan bought through Google Play is billed by Google, not OpenAI — a separate `OPENAI*` charge is a different purchase with its own receipt |
+| OpenCode | link in the receipt mail → Stripe-hosted receipt page | The mail has no PDF and the page no Download button; render it with headless Chrome `--print-to-pdf` (separate `--user-data-dir`) |
+| OpenMoney | openmoney.jp/subscriptions → お支払い履歴 → row detail → **Download receipt** (not Download invoice) | Payment mail is body-only; no T-number printed |
 
 ## Notes
 
@@ -531,6 +573,9 @@ new vendor turns out to be dashboard-only.
   evidence set.
 - Secrets stay in the Keychain (`mail2mf-mfc`). Never display or store tokens or the
   client_secret.
+- The `mfc_ca` MCP covers accounting (journals, transactions, partners) but has no Box API —
+  uploads go through `mf_api.py`, and attaching evidence to a journal is UI-only.
+  `getJournals` takes `start_date` / `end_date`, not `from` / `to`.
 - Box has no delete API — `DELETE /v1/files/{id}` returns 404 while `GET` on the same path
   returns 200, so the endpoint is read/upload only. Deleting is UI work: クラウドBox → the
   file's 詳細 → the trash icon at the top right. It goes straight to ゴミ箱 with no

@@ -27,6 +27,10 @@ individual collaborator with edit rights, so the Drive MCP reaches it directly: 
 with `parentId = '<FOLDER_ID>'` enumerates the contents, `read_file_content` reads them, and
 `update_file` with a new `parentId` moves a file between folders. Try that first.
 
+Track and count files by **file id**, never by title. Scanner filenames are minute-granular
+(`スキャン_20260916-1313.pdf`), so two pages scanned in the same minute become two different
+files with the same name.
+
 If it comes back empty, the individual share has lapsed — ask the user to re-add the working
 account as 閲覧者/編集者. **Do not fall back to link sharing.** These are a person's complete
 payment records; リンクを知っている全員 exposes them to anyone who ever sees the URL and leaves no
@@ -55,8 +59,12 @@ Two things are worth distrusting in that text:
   PNG. If it isn't, the cheapest read is simply opening
   `https://drive.google.com/file/d/<ID>/view` in the browser and screenshotting the preview —
   Drive renders the page for you, and one zoomed screenshot answers 日付/金額/店名/登録番号
-  without any download at all. (`download_file_content` returns base64 into the conversation,
-  which cannot be written back out to a file, so it is not a route to a local PDF.)
+  without any download at all. When you need the file itself on disk (to OCR it, or to upload
+  it), call `download_file_content`: a receipt scan always exceeds the tool-result limit, so
+  the harness saves the result to `<projectDir>/<sessionId>/tool-results/mcp-claude_ai_Google_Drive-download_file_content-<ts>.txt`
+  as JSON `{content, id, mimeType, title}`, and the base64 never enters context.
+  `jq -r .content <saved file> | base64 -d > "$(jq -r .id <saved file>).pdf"` restores the
+  original byte for byte. A download clicked in the MCP-driven browser never reaches the disk.
 - **登録番号 and long digit strings are where OCR fails quietly.** One receipt's number came
   back as `170105010230` — wrong length, silently. Crop and magnify that line (`pdftoppm -r 500`,
   then crop; thermal receipts often print it sideways so rotate) and read it digit by digit
@@ -77,6 +85,11 @@ Match on content instead. Pull journals covering the whole span of receipt dates
 a journal exists with **the same amount and a transaction date within ±3 days**. In one run this
 retired 18 of 28 receipts, every one of them already carrying its evidence. Report what you
 skipped and why, so the user can see the judgement rather than just the survivors.
+
+A journal with the same amount *outside* ±3 days is a separate payment until the receipt says
+otherwise. Courses and subscriptions bill the same amount again; a receipt once taken for a
+re-issue of a payment three months earlier was in fact a renewal. Read the printed issue date
+and receipt number before calling anything a re-issue.
 
 ## 4. Find each remaining receipt's payment
 
@@ -105,9 +118,9 @@ difference with the user rather than silently booking either figure as the expen
 ## 5. Upload, journalize, attach
 
 Upload only the receipts that survived step 3, checking each name against Box first
-(`list-box --name`, a server-side **substring, case-insensitive** search on `file_name` — the
-endpoint caps `limit` at 100 and cannot page, so an inventory scan proves nothing, but a vendor
-fragment like `wolfgangs` does find every copy). Give files a self-describing name like
+(`list-box --name`, a server-side **substring, case-insensitive** search on `file_name` — a
+bare `list-box` returns only the newest 100 files, so an inventory scan proves nothing (see
+mail2mf step 3), but a vendor fragment like `wolfgangs` does find every copy). Give files a self-describing name like
 `20260803_wolfgangs_76549.pdf`; you will be matching them by eye in the attach dialog later,
 and the substring search only helps if the name carries the vendor and the amount.
 
@@ -116,6 +129,9 @@ a previous run may already have put the same receipt there under a different con
 one pass this produced 15 duplicate pairs — the same bytes under a descriptive name and under
 a mechanical `gdrive_<date>_<driveid>___<original>.pdf` one. Cleaning that up afterwards is
 UI-only, one file at a time (see mail2mf's Notes), so it is much cheaper to check first.
+Check Box itself, not `gdrive_uploaded.json`: the manifest records only files that went up
+through the Drive route, and anything uploaded directly with `mf_api.py upload` is missing from
+it. Where the name carries no vendor, use mail2mf's Box amount search.
 
 Then journalize per mail2mf's rules — card charges through 連携サービスから入力, cash through
 `postJournals` (借 旅費交通費 / 貸 事業主借, gross amounts on both sides) — and attach each Box

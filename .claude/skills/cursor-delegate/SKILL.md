@@ -53,18 +53,26 @@ Rule of thumb: *ambient conventions (`.cursor/rules` / `AGENTS.md`) → already 
 
 ```bash
 # Verify clean working tree BEFORE switching branches.
-# If output is non-empty, STOP — do not proceed. Ask the user to commit or
-# stash their work first; otherwise it gets carried into the delegation
-# branch and mistaken for Cursor's changes.
+# If output is non-empty, STOP — it would be carried into the delegation branch
+# and mistaken for Cursor's changes. Dispatch into a fresh worktree at the base
+# instead (`git worktree add <absolute path> -b <branch-name> <base-branch>` —
+# a relative path typed from inside another worktree nests the new one), or ask
+# the user to commit first. Leave stash alone (CLAUDE.md: no git stash).
 git status --short
 
 # Only after the check passes: create branch (follow project naming conventions)
 git checkout <base-branch> && git checkout -b <branch-name>
+
+# Record the base. Step 4 diffs against it: a delegate that commits despite the
+# ban leaves an empty working tree, which reads as "did nothing".
+BASE=$(git rev-parse HEAD)
 ```
 
 ### 2. Claude Code constructs the prompt
 
 Write task-level instructions. Do NOT write exact code diffs. Do NOT repeat what Cursor already auto-loads (`.cursor/rules/*.mdc`, `AGENTS.md`, `.cursor/skills/`). **Required synced skills go in as name invocations (`/name` / `$name`); required plugin skills go in as a read-first absolute path; ad-hoc constraints (caller contracts from impact analysis, task-specific forbidden actions) go in as pasted text.** Nothing else from `CLAUDE.md` goes in (see "What Cursor already knows"). Keep it concise otherwise.
+
+**Every value in the brief is a literal** — ports, paths, hashes, counts. The implementer sees only the brief: a prompt saying "use the base= printed above" sent opencode grepping the parent repo for it, outside its directory, and the run died at 1.9 KB (2026-09-17).
 
 Resolve the TDD skill path BEFORE writing the prompt:
 
@@ -95,6 +103,10 @@ Synced skills work the opposite way — the name invocation is all Cursor needs 
 `python-code-style`, `python-project-structure`, and `python-design-patterns` stay out of prompts. Linters and task review already surface everything they say, so they cost tokens without adding a constraint the review would have missed.
 
 ```
+## Working directory
+<absolute path>。最初に `pwd` で一致を確かめ、<その場所でしか成り立たない事実
+（例: 「テストは 853 件」）> も確かめること。どちらかが違えば着手せず報告する。
+
 ## Task
 [What needs to be done — goal level, no code snippets]
 
@@ -105,7 +117,9 @@ Synced skills work the opposite way — the name invocation is all Cursor needs 
 [Main files to change. Cursor may add more if needed]
 
 ## Test requirements
-[What to test. Let Cursor decide how to write the tests]
+[What to test. Let Cursor decide how to write the tests. Split each acceptance
+criterion into one line per clause — a clause left inside a sentence goes
+untested. Where the outcome is a measurement, give the expected numbers.]
 
 ## Implementation instructions
 [REQUIRED — include verbatim, with $TDD_PATH already expanded to the absolute
@@ -122,12 +136,7 @@ was empty in step 2:]
 stdlib / 既存依存優先。意図的な簡略化には `ponytail:` コメントを付ける）。
 
 ## Forbidden
-- git commit / push / branch operations
-- Creating or modifying files not related to the task
-- Changing auth settings or secrets
-- Adding or updating dependencies
-- Running dev server / build / deploy
-- Updating planning or progress tracking files
+[Default forbidden items (end of this skill), verbatim]
 ```
 
 ### 3. Run Cursor
@@ -235,6 +244,12 @@ Why each piece is there — all four checked against a live pane on 2026-08-31:
   `wait` still reported `codex-trust-workspace` although the pane had already moved on. Treat
   one `wait` result as a hint and confirm with `terminal read` before concluding anything
   about the pane's state.
+- **`tui-idle` also fires mid-startup and on approval prompts** (2026-09-05/06). Sent too
+  early, the Enter is consumed and the brief sits in the input box as `[Pasted text #1 …]`,
+  unsent — every later `wait` returns idle at once. After `send`, `terminal read` the tail:
+  a leftover `[Pasted text` means `terminal send --enter --text ""`, and the long wait starts
+  only once `Composing` / `Thinking` shows. After the long wait, an idle pane ending in
+  `Run this command?` / `Not in allowlist` is waiting for you, not done.
 
 **Review-fix rounds need no chat id.** The pane is still alive, so send the findings to the
 same handle with another `terminal send`. This is where Route B is plainly better: in Route A
@@ -285,6 +300,9 @@ tail -40 "$LOG"   # completion report
 returns plain text, so the recitation is directly greppable. The default response is a bounded
 tail, which is the wrong end — the read-back sits at the *top*. Page from `oldestCursor` and
 follow `nextCursor` while `limited` is true so you actually see the opening of the reply.
+**Read and save the recitation as soon as it appears** (tens of seconds after `send`): on a
+long task the pane's retention drops the opening before completion — a +668/-232 task lost
+it past ~36,000 lines and no cursor brought it back (2026-09-06).
 
 **Then actually check it.** A read-back requirement you never verify is not a control — it is a
 comment. Confirm the reply opens with the recitation and that it names the actual procedure
@@ -308,6 +326,29 @@ The same rule applies to the codex fallback in 3b.
 - Review-fix rounds add `--resume <chatId>`, using the chat id recorded when the task was dispatched — not `--continue` (see Session management)
 - Verify the exact id with `cursor agent models` before scripting it — ids change between Cursor releases and a wrong `--model` silently falls back
 - Do NOT use `--yolo`. Use default approval-based execution
+
+#### Long and silent runs
+
+**Run every dispatch, and every `orca terminal wait` past a few minutes, with
+`run_in_background: true`** and wait for the task notification. The Bash tool clamps
+`timeout` to 600000 ms (10 min) whatever you pass: a codex run given 30 min and a Cursor run
+given 50 were killed at 10, with no read-back or report in the log and a half-written tree
+left behind (2026-07-25, 2026-08-20).
+
+**A live process with no output is not progress.** opencode at its usage limit (0-byte
+output, flat CPU, no error) and Cursor on a ~2,000-character prompt (exit 0, nothing written)
+both look exactly like a heavy task. Keep the prompt body short — put long contracts in a file
+and pass its path. When a run has been silent for a few minutes with CPU time not growing,
+probe the same model with a trivial prompt (`1+1は？`) before waiting longer. Call it hung
+only when all of these hold, because a model turn or a child `make test` looks the same:
+
+- log mtime unchanged across two checks ≥5 min apart (`stat -f "%Sm" <log>`)
+- no children (`pgrep -P <pid>` empty)
+- CPU time under 5% of elapsed, after ≥30 min (`ps -o pid,etime,time,%cpu -p <pid>`)
+
+Then `kill -INT <pid>`, wait 30 s, `kill <pid>`; check the working tree (step 4) and resume
+the same session with a shorter prompt. **A run that stopped before writing its conclusion is
+not a pass** — re-dispatch it narrower, or check that part yourself.
 
 #### Model routing
 
@@ -370,15 +411,38 @@ EOF
 # review and impact reconciliation too.
 git status --porcelain   # every modified AND newly created path
 git diff --stat          # size/shape of modifications to tracked files
+git log --oneline "$BASE"..HEAD   # commits the delegate made despite the ban
+# gitignored files never show above — a delegate-created .env.test once
+# overrode the test DB and turned 7 DB tests into silent skips
+find . -newermt '<dispatch time>' -name '.env*' -not -path './node_modules/*'
 # → Ensure no path (tracked or new) falls outside the task scope
 
-# Run tests (use project's test command)
+# Run tests (use project's test command). Compare passed AND skipped counts
+# with the pre-dispatch run — a rise in skips is a broken environment.
 <project-test-command>
+
+# Run each test the task added BY NAME, with a reporter that prints names,
+# and see the names in the output. Suite totals only show nothing else broke.
+#   pytest <file>::<name> -v | go test ./pkg -run '^Name$' -v
+#   npx playwright test <file> --reporter=list
+<targeted-test-command>
 
 # If OK, commit
 git add <changed-files>
 git commit -m "<message>"
 ```
+
+**The report is a claim; the commands above are the evidence.** Check every "reverted" /
+"rewrote" / "N passed" against the files yourself — a "reverted" change was re-collapsed by
+format-on-save and committed with the claim intact (2026-07-12), and a "rewrote both files"
+report came back with neither file touched (2026-09-17). Where the task moves a metric (a
+score, a measurement table), recompute it yourself: green tests encode the implementer's
+understanding, and one run passed its tests by deleting out-of-scope logic while the
+validation score fell from 94.5% to 0%.
+
+**Retry only when both the working tree and `$BASE..HEAD` are empty.** Anything else is a
+partial run, and replaying the brief onto it double-applies: send "the rest only" to the same
+session instead.
 
 If unexpected files were changed:
 ```bash
@@ -390,11 +454,20 @@ git status --porcelain
 git checkout -- <unexpected-file>
 ```
 - NEVER blanket-revert: `git checkout -- .` and piping `git diff --name-only` into `git checkout` are forbidden — they permanently erase concurrent or user changes
-- If unsure whether a change is safe to discard, prefer recoverable `git stash push -- <path>` over `git checkout --`
+- If unsure whether a change is safe to discard, copy it out first (`cp <path> <scratchpad>/`) so `git checkout --` stays recoverable
 
 ### 5. Claude Code reviews → push → PR
 
 Follow the project's review workflow (e.g., spec review + quality review via subagents).
+
+**Before sending findings back, check each premise in your own context.** A reviewer sees the
+diff, not the environment. Relayed unchecked, "reuse the existing `config.Load()`" dragged in
+its validation and broke the very property the branch protected, and two "harmless" P2 rule
+changes cut real rows out of real files the same day (2026-07-27, 2026-09-16 ×2). So: read the
+side effects of any function you tell the implementer to reuse; re-run the real-data
+measurement before relaying a rule change; write stop conditions as "report whether X holds",
+not "never do X". When the implementer pushes back on the brief, check your own premise first
+— it was right both times this happened (2026-07-27, 2026-07-30).
 
 ## Session management
 
@@ -434,11 +507,12 @@ Why mint it instead of recovering it later: `cursor agent ls` is an **interactiv
 
 `--continue` (and the bare `resume` subcommand, "Resume the latest chat session") both target *the most recent* session. `cursor agent --help` does not say whether "most recent" is scoped per workspace or globally, so with parallel dispatches you cannot tell from the flags alone which session you are about to write into. An explicit `--resume "$CHAT_ID"` removes the question entirely — use it, and treat `--continue` as acceptable only for a throwaway one-session interactive run.
 
-## Default forbidden items (include in every Cursor prompt)
+## Default forbidden items (every prompt — Cursor, opencode, codex)
 
-- git commit / push / branch operations
+- Any git command that changes state — commit / push / branch / checkout / reset / stash
 - Creating or modifying files not related to the task
-- Changing auth settings or secrets
+- Changing logic outside the task to make an already-failing test pass — mark that test `xfail(strict=True)` (or the runner's equivalent) and report it
+- Changing auth settings or secrets, or creating / editing any `.env*` file
 - Adding or updating dependencies
 - Running dev server / build / deploy
 - Updating planning or progress tracking files

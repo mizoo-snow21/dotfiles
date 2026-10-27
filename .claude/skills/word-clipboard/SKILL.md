@@ -117,6 +117,8 @@ HEX=$(xxd -p page.html | tr -d '\n')
 osascript -e "set the clipboard to «data HTML${HEX}»"
 ```
 
+**Re-read the document's current structure before pasting.** A shared document may have been reworked since your last session (one went from 48 to 37 pages in between). Check the status bar's page and word counts and the TOC / navigation pane against what you expect, and re-locate your anchors.
+
 ### Match the destination's formatting explicitly
 
 Word for the web does **not** inherit the surrounding document's look when it pastes HTML — it applies its own paste defaults. Leaving font and spacing unspecified produced three separate rounds of "wrong size" / "wrong line spacing" feedback. Measure the target document and write the values into the HTML.
@@ -145,7 +147,11 @@ Do **not** add `line-height` when the document has no `w:line` setting — speci
 - **Pasting at the start of a heading merges the first block into the preceding paragraph** and drops its heading style. Fix: put the cursor at the join → Return → re-apply the heading level (⌘⌥1/2/3). The split often lands one character off, leaving a stray character at the end of the previous paragraph. Repair that with shift+Left → Delete and retype the character at the heading's start; ⌘X → click → ⌘V mis-lands because the click coordinate shifts.
 - **The TOC field's structure cannot be saved.** Changing "Show headings up to", or deleting the TOC, produces "Couldn't save automatically" and drops the session to Viewing every time (4/4 attempts, 2026-08-06, with no other session open). Updating the TOC saves fine. So depth changes need desktop Word or a docx patch of the field switch — `TOC \o "1-3"` → `\o "1-2"` in `word/document.xml`, exactly one occurrence; the many `TOC1`/`TOC2`/`TOC3` hits are paragraph-style references and must not be touched.
 - **Updating the TOC while the document is still paginating writes `2` as every page number.** Confirmed 2026-08-07: the entry text updates correctly, but every number collapses to 2 and reloading does not repair it — the wrong numbers are now stored in the field. The page counter in the status bar is the tell; it drifts (26 → 46 → 26) while Word lays the document out. Reload, watch the counter until it stops moving, *then* update — the second update wrote 1/2/3/4/5/5/7/8… correctly. So: never update the TOC as the last action after a large paste; give the layout time first.
+- **Update the TOC from inside it**: click in the TOC, then the update icon on its floating toolbar. References → Update Table stays greyed out while the caret is outside the TOC.
 - **Moving a chapter between parts is best done inside Word** (select → ⌘X → navigate → ⌘V). It carries the document's own formatting, so none of the HTML-paste formatting problems apply.
+- **The Find box keeps its previous text**, and typing appends to it. ⌘A, then type.
+- **The navigation pane's heading tree ignores the mouse wheel.** Collapse the levels above the target, or jump there by clicking a Find result.
+- **A browser window that is not frontmost can render white** (seen in Brave). Activate the app and the document's tab with osascript before acting.
 
 ### Replacing a whole section without disturbing its heading
 
@@ -166,6 +172,8 @@ await navigator.clipboard.writeText(btoa(s));
 ```
 
 `http://localhost` receivers do not work — an HTTPS page is blocked from reaching them by mixed-content rules.
+
+Before concluding a download failed, check the full path: `ls ~/Downloads/` can fail with "Operation not permitted" (TCC) while `stat ~/Downloads/<file>` or `[ -f … ]` succeeds. Misreading that error once sent a session building workarounds for a download that had landed.
 
 The SharePoint REST API is reachable with the shared session (`/_api/contextinfo` returns a form digest; `GetFileById('<guid>')` returns 200), so a `PUT` to `GetFileById(...)/$value` is the theoretical overwrite path — but expect the harness to refuse to issue it. Treat file replacement as the user's action, and prefer editing in place.
 

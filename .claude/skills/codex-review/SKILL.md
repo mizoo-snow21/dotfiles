@@ -16,6 +16,8 @@ Two review targets, same loop:
 
 > **issue / PR bodies are out of scope** (user directive, 2026-08-22). The usage limit is tight, so it is spent on plans and specs, where a defect costs a whole implementation round. When an externally published document needs fact-checking, dispatch a subagent (Fable) instead.
 
+> **Plan and spec files run this loop on their own.** Writing `docs/superpowers/specs/*.md`, `docs/superpowers/plans/*.md`, `tasks/plan*.md` or `tasks/todo.md` fires `~/.claude/bin/codex-review-plan-hook.sh`, which reviews the file and re-reviews on every later write until codex reports no findings. Act on its result instead of running `codex exec` by hand. The hook stays silent when no model answered (codex missing, or every model failed) — silence means the document was not reviewed.
+
 ## Workflow
 
 1. **Gather context**: Determine what to review.
@@ -66,7 +68,7 @@ Two review targets, same loop:
    ```
 
 3. **Triage findings**: For each finding, determine:
-   - **Valid critical**: real defect, needs a fix.
+   - **Valid critical**: real defect. Name the rule it breaks, find every other site in the target that breaks the same rule, and fix them all in this round — fixing only the cited line hands its siblings to the next round, and the loop stops converging.
    - **False positive**: Note why it's a false positive (e.g., header rows counted differently).
 
    Then check what you are allowed to do with it, against the authorization table below. If the target is something you are producing or implementing in this task, apply the fix and continue the loop. **If the user only asked you to review, stop here**: report the findings and ask before touching the file — a review-only request never becomes edit authority, no matter how clearly correct the fix looks.
@@ -122,6 +124,7 @@ When falling back, start a **new session** (do not use `resume --last` since the
 - When a finding is a false positive, explain why clearly in the resume prompt so codex doesn't re-raise it.
 - If codex cannot run files (missing deps), fall back to static analysis of the code.
 - **Re-review from the working tree. Do not commit or push to get there** — the loop needs the updated file contents in the prompt, not a pushed branch.
+- **A usage limit is not a rate limit.** `You've hit your usage limit … try again at <date>` covers the whole account — every model, and `@codex review` on GitHub — so the fallback list above cannot help. Stop, note the reset time, and switch to the CLAUDE.md fallback (`pstack:interrogate`). Before each later review, probe codex with a one-line `codex exec`, and return to it once it answers.
 
 ## What the review authorizes
 
