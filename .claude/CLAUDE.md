@@ -133,10 +133,18 @@ blast radius is non-trivial.
 - Reduce the user's context switching to zero
 
 ### 7. Self-Improvement Loop
-- After ANY correction from the user: update `tasks/lessons.md` with the pattern
-- Write rules for yourself that prevent the same mistake
-- Ruthlessly iterate on these lessons until mistake rate drops
-- Review lessons at session start for relevant project
+After ANY correction from the user, put the fix where it is loaded at the moment that mistake happens. A lesson no one re-reads at that moment does not stop the repeat: the 2026-10-27 inventory found the same mistakes recurring 5–15 times while their lessons sat in `tasks/lessons.md`.
+
+| The mistake | Where the fix goes |
+|---|---|
+| A machine could catch it | a hook, lint, test or CI check |
+| A step missing from a procedure | the skill that runs that procedure (edit it via `writing-for-agents`) |
+| A review or audit let it through | the agent definition in `~/.claude/agents/` |
+| It applies to every session | this file |
+| A fact about one project | that project's CLAUDE.md / AGENTS.md / docs (a team repo takes a PR) |
+
+- Check the target first. When the rule is already there and was not followed, fix its trigger or add a gate instead of restating it.
+- `tasks/lessons.md` holds only what has no home yet; move an entry out once its home exists. Read it at session start for the relevant project.
 
 ## SDD (Subagent-Driven Development) Flow
 
