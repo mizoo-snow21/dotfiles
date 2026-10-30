@@ -1,11 +1,11 @@
 ---
 name: codex-review
-description: Run a codex (GPT-6 Sol) review via `codex exec` and iterate until no critical findings remain. Use for code (PR or staged changes) before merging, and for implementation plans, specs, and todo docs before they are shown. Not for issue / PR bodies — codex usage limit is tight, so it is reserved for the documents where review pays off most.
+description: Run a codex (GPT-6.1 Sol) review via `codex exec` and iterate until no critical findings remain. Use for code (PR or staged changes) before merging, and for implementation plans, specs, and todo docs before they are shown. Not for issue / PR bodies — codex usage limit is tight, so it is reserved for the documents where review pays off most.
 ---
 
 # Codex Review
 
-Run a GPT-6 Sol review via `codex exec`, then iterate fixes until clean.
+Run a GPT-6.1 Sol review via `codex exec`, then iterate fixes until clean.
 
 ## What this covers
 
@@ -35,7 +35,7 @@ Two review targets, same loop:
 
    **Code:**
    ```bash
-   codex exec -m gpt-6-sol "Review this code. Do not nitpick. Only point out critical issues (bugs, data loss, incorrect logic, missing error handling that would cause crashes, security issues).
+   codex exec -m gpt-6.1-sol "Review this code. Do not nitpick. Only point out critical issues (bugs, data loss, incorrect logic, missing error handling that would cause crashes, security issues).
 
    Focus areas:
    - Correctness of core logic
@@ -52,7 +52,7 @@ Two review targets, same loop:
 
    **Documents** (plans, specs, todo docs) — do not reuse the code prompt; its focus areas miss specification-level defects:
    ```bash
-   codex exec -m gpt-6-sol "Review this document. Do not nitpick. Only point out critical issues.
+   codex exec -m gpt-6.1-sol "Review this document. Do not nitpick. Only point out critical issues.
 
    Focus areas:
    - Internal contradictions, and contradictions with the referenced rules/spec
@@ -76,7 +76,7 @@ Two review targets, same loop:
 4. **Re-review**: After fixes, resume **the session id recorded in step 2** — never `--last`. Keep the target type's wording: "code" for code, "document" for documents (the session already carries the matching focus areas from step 2):
    ```bash
    # Code:
-   codex exec resume <REVIEW_SESSION_ID> -m gpt-6-sol "The code was updated. Changes:
+   codex exec resume <REVIEW_SESSION_ID> -m gpt-6.1-sol "The code was updated. Changes:
    1. Finding #N: <what was fixed or why it's a false positive>
 
    Review the updated code. Do not nitpick. Only point out critical issues:
@@ -84,7 +84,7 @@ Two review targets, same loop:
    " < /dev/null
 
    # Documents — same shape, document wording:
-   codex exec resume <REVIEW_SESSION_ID> -m gpt-6-sol "The document was updated. Changes:
+   codex exec resume <REVIEW_SESSION_ID> -m gpt-6.1-sol "The document was updated. Changes:
    1. Finding #N: <what was fixed or why it's a false positive>
 
    Review the updated document again with the same focus areas. Do not nitpick. Only point out critical issues:
@@ -101,24 +101,25 @@ Two review targets, same loop:
 
 Use models in this priority order. If a `codex exec` call fails with a rate limit error (429, "rate limit", "too many requests", etc.), retry with the next model down:
 
-1. `gpt-6-sol`
-2. `gpt-5.6-sol`
-3. `gpt-6-astra`
-4. `gpt-5.5`
-5. `gpt-5.4`
-6. `gpt-5.3-codex`
-7. `gpt-5.2-codex`
-8. `gpt-5.2`
-9. `gpt-5.1-codex`
-10. `gpt-5.1`
-11. `gpt-5-codex`
-12. `gpt-5`
+1. `gpt-6.1-sol`
+2. `gpt-6-sol`
+3. `gpt-5.6-sol`
+4. `gpt-6-astra`
+5. `gpt-5.5`
+6. `gpt-5.4`
+7. `gpt-5.3-codex`
+8. `gpt-5.2-codex`
+9. `gpt-5.2`
+10. `gpt-5.1-codex`
+11. `gpt-5.1`
+12. `gpt-5-codex`
+13. `gpt-5`
 
 When falling back, start a **new session** (do not use `resume --last` since the session was on a different model). Mention the fallback to the user.
 
 ## Rules
 
-- Default to `-m gpt-6-sol` for reviews. Fall back per the model priority above on rate limit.
+- Default to `-m gpt-6.1-sol` for reviews. Fall back per the model priority above on rate limit.
 - **Resume by recorded session id, never `--last`** (step 4). Same model only — a fallback to a different model starts a new session and needs its own id recorded.
 - Include the instruction "Do not nitpick. Only point out critical issues" in every review prompt.
 - When a finding is a false positive, explain why clearly in the resume prompt so codex doesn't re-raise it.
