@@ -100,3 +100,6 @@ docs/superpowers/
 # Cursor machine state (extensions are installed by Cursor itself, ide_state is per-machine)
 .cursor/extensions/
 .cursor/ide_state.json
+
+# opencode service password (machine-local secret)
+.config/opencode/service.json
