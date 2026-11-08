@@ -15,6 +15,8 @@ node = "latest"
 "npm:gitnexus" = "latest"
 "npm:portless" = "latest"
 "npm:pyright" = "latest"
+"npm:typescript-language-server" = { version = "latest", postinstall = "npm install --no-save --no-audit --no-fund --prefix \"$(mise where npm:typescript-language-server)\" typescript@5" }
+"go:golang.org/x/tools/gopls" = "latest"
 pnpm = "latest"
 python = "latest"
 terraform = "latest"

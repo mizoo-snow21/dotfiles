@@ -44,6 +44,25 @@ else
     claude mcp add -s user flint-chart -- npx -y flint-chart-mcp
 fi
 
+if claude mcp get ms365 &> /dev/null; then
+    echo "✅ Already registered: ms365"
+else
+    if [[ -z "$MS365_MCP_TENANT_ID" ]]; then
+        echo "⚠️  MS365_MCP_TENANT_ID environment variable is not set (Entra tenant id, not stored in this repo)"
+        read -p "Enter MS365_MCP_TENANT_ID now (or press Enter to skip): " ms365_tenant
+        if [[ -n "$ms365_tenant" ]]; then
+            MS365_MCP_TENANT_ID="$ms365_tenant"
+        else
+            echo "⏭️  Skipping ms365 registration"
+            MS365_MCP_TENANT_ID=""
+        fi
+    fi
+    if [[ -n "$MS365_MCP_TENANT_ID" ]]; then
+        echo "📦 Registering: ms365"
+        claude mcp add -e MS365_MCP_TENANT_ID="$MS365_MCP_TENANT_ID" -s user ms365 -- npx -y @softeria/ms-365-mcp-server --preset files
+    fi
+fi
+
 # pi は Claude Code の mcpServers 形式をそのまま読む（pi docs mcp.md: "Copy the existing mcpServers entry"）。
 # ~/.claude.json を正本にして丸ごと写す。pi 専用のエントリは持たない。
 # 一時ファイル + mv: 旧 install.sh が張った symlink が残っていても辿らず置き換える（dotfiles に秘密が落ちない）。

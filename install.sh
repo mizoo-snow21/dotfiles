@@ -266,6 +266,85 @@ if [[ -f "$DOTFILES_DIR/scripts/install-claude-plugins.sh" ]]; then
 fi
 
 # ==============================================================================
+# Claude Code Install (Optional)
+# ==============================================================================
+
+echo ""
+if command -v claude &> /dev/null; then
+    echo "✅ Claude Code already installed ($(claude --version 2>/dev/null | head -1))"
+else
+    echo "📦 Claude Code is not installed"
+    read -p "Do you want to install Claude Code now (curl -fsSL https://claude.ai/install.sh | bash)? (y/N): " setup_claude
+    if [[ "$setup_claude" =~ ^[Yy]$ ]]; then
+        curl -fsSL https://claude.ai/install.sh | bash
+        export PATH="$HOME/.local/bin:$PATH"
+    else
+        echo "⏭️  Skipping Claude Code install"
+        echo "   You can run it later with: curl -fsSL https://claude.ai/install.sh | bash"
+    fi
+fi
+
+# ==============================================================================
+# Cursor CLI Install (Optional)
+# ==============================================================================
+
+echo ""
+if command -v cursor-agent &> /dev/null; then
+    echo "✅ Cursor CLI already installed ($(cursor-agent --version 2>/dev/null | head -1))"
+else
+    echo "📦 Cursor CLI is not installed"
+    read -p "Do you want to install Cursor CLI now (curl https://cursor.com/install -fsS | bash)? (y/N): " setup_cursor_cli
+    if [[ "$setup_cursor_cli" =~ ^[Yy]$ ]]; then
+        curl https://cursor.com/install -fsS | bash
+        export PATH="$HOME/.local/bin:$PATH"
+    else
+        echo "⏭️  Skipping Cursor CLI install"
+        echo "   You can run it later with: curl https://cursor.com/install -fsS | bash"
+    fi
+fi
+
+# ==============================================================================
+# opencode Install (Optional)
+# ==============================================================================
+
+echo ""
+if command -v opencode &> /dev/null; then
+    echo "✅ opencode already installed ($(opencode --version 2>/dev/null | head -1))"
+else
+    echo "📦 opencode is not installed"
+    read -p "Do you want to install opencode now (curl -fsSL https://opencode.ai/install | bash)? (y/N): " setup_opencode
+    if [[ "$setup_opencode" =~ ^[Yy]$ ]]; then
+        curl -fsSL https://opencode.ai/install | bash
+        export PATH="$HOME/.opencode/bin:$PATH"
+        echo "   Next: run 'opencode auth login' for OpenCode Go and any other providers."
+    else
+        echo "⏭️  Skipping opencode install"
+        echo "   You can run it later with: curl -fsSL https://opencode.ai/install | bash"
+    fi
+fi
+
+# ==============================================================================
+# pi Install (Optional)
+# ==============================================================================
+
+echo ""
+if command -v pi &> /dev/null; then
+    echo "✅ pi already installed ($(pi --version 2>/dev/null))"
+else
+    echo "📦 pi (coding agent) is not installed"
+    read -p "Do you want to install pi now (curl -fsSL https://pi.dev/install.sh | sh)? (y/N): " setup_pi
+    if [[ "$setup_pi" =~ ^[Yy]$ ]]; then
+        curl -fsSL https://pi.dev/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+        echo "   Next: run 'pi', then /login (openai or anthropic) and /model to pick the default model."
+        echo "   settings.json is not tracked (per-install deviceId), so the default model is not restored."
+    else
+        echo "⏭️  Skipping pi install"
+        echo "   You can run it later with: curl -fsSL https://pi.dev/install.sh | sh"
+    fi
+fi
+
+# ==============================================================================
 # pi Packages Setup (Optional)
 # ==============================================================================
 
