@@ -224,7 +224,7 @@ sol lives only in the codex CLI.
 
 The same dispatch works for reviewing a document (a plan, a spec, a manual chapter) when the
 review needs a reviewer outside codex. For a plan / spec / todo doc whose codex review hit the
-usage limit, CLAUDE.md §3 routes to `pstack:interrogate` instead. Two differences from an
+usage limit, CLAUDE.md §3 routes to `Agent(judge)` instead. Two differences from an
 implementation dispatch:
 
 - `--agent plan` instead of `build` — the reviewer has no business editing files, and read-only

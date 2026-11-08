@@ -314,8 +314,7 @@
     "ralph-loop@claude-plugins-official": true,
     "superpowers@superpowers-marketplace": true,
     "slack@claude-plugins-official": false,
-    "pyright-lsp@claude-plugins-official": true,
-    "pstack@pstack-claude": true
+    "pyright-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
@@ -334,12 +333,6 @@
       "source": {
         "source": "github",
         "repo": "obra/superpowers-marketplace"
-      }
-    },
-    "pstack-claude": {
-      "source": {
-        "source": "github",
-        "repo": "michael-denyer/pstack-claude"
       }
     }
   },
