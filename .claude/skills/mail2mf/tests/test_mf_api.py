@@ -465,3 +465,22 @@ class TestAuth(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMcpUrl(unittest.TestCase):
+    """内部エンドポイントの URL はコードに置かず、env か ~/.claude.json（Claude Code の登録値）から取る。"""
+
+    def test_env_wins(self):
+        with mock.patch.dict(os.environ, {"MFC_CA_MCP_URL": "https://env.example/mcp"}):
+            self.assertEqual(mf_api.mcp_url(claude_json="/nonexistent.json"), "https://env.example/mcp")
+
+    def test_falls_back_to_claude_json_and_fails_fast_when_missing(self):
+        import tempfile
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            json.dump({"mcpServers": {"mfc_ca": {"type": "http", "url": "https://cfg.example/mcp"}}}, f)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("MFC_CA_MCP_URL", None)
+            self.assertEqual(mf_api.mcp_url(claude_json=f.name), "https://cfg.example/mcp")
+            with self.assertRaises(SystemExit):
+                mf_api.mcp_url(claude_json="/nonexistent.json")

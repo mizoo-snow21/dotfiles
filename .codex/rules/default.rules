@@ -15,7 +15,7 @@ prefix_rule(pattern=["claude", "--strict-mcp-config", "--mcp-config", "{\"mcpSer
 prefix_rule(pattern=["claude", "--debug-file", "/private/tmp/claude-hang-debug.log", "-p", "hello", "--output-format", "json"], decision="allow")
 prefix_rule(pattern=["claude", "plugin", "enable"], decision="allow")
 prefix_rule(pattern=["claude", "mcp", "remove", "mfc_ca", "-s", "user"], decision="allow")
-prefix_rule(pattern=["claude", "mcp", "add", "--transport", "http", "--scope", "user", "mfc_ca", "https://beta.mcp.developers.biz.moneyforward.com/mcp/ca/v3"], decision="allow")
+prefix_rule(pattern=["claude", "mcp", "add", "--transport", "http", "--scope", "user", "mfc_ca"], decision="allow")
 prefix_rule(pattern=["claude", "mcp", "login", "mfc_ca"], decision="allow")
 prefix_rule(pattern=["claude", "mcp", "get", "mfc_ca"], decision="allow")
 prefix_rule(pattern=["rtk", "make", "e2e-frontend"], decision="allow")
