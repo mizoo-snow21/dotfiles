@@ -107,11 +107,22 @@ backup_and_link "$DOTFILES_DIR/.codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
 backup_and_link "$DOTFILES_DIR/.codex/rules" "$HOME/.codex/rules"
 # opencode: opencode.jsonc と plugins/ をリポジトリで持つ（node_modules は下の mise 節で入れる）
 backup_and_link "$DOTFILES_DIR/.config/opencode" "$HOME/.config/opencode"
-# pi は AGENTS.md だけリンクする。~/.pi/agent には auth.json・sessions/・trust.json と
+# pi は個別ファイル/ディレクトリをリンクする。~/.pi/agent には auth.json・sessions/・trust.json と
 # インストーラの実体 (install/, bin/) が同居している。settings.json は持たない: pi がそこへ
 # deviceId (ChatGPT ログインで端末 ID として送るインストール固有の UUID) を書き、消しても
 # 作り直すため、公開リポジトリに載る (2026-10-12 確認)。extensions/rtk.ts は下の rtk 節で生成する
-backup_and_link "$DOTFILES_DIR/.pi/agent/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
+# skills/ は Claude Code と同じ .claude/skills を指す（~/.agents/skills は pi が標準で読む）。
+# agents/ は scripts/claude-agents-to-pi.py が .claude/agents から生成する (pi-subagents 用)。
+# mcp.json はローカル: ~/.claude.json を正本に scripts/setup-claude-code-mcp.sh が写す。
+# pi packages（superpowers / ponytail / pi-subagents / pi-lens）は下の "pi Packages Setup" 節で入れる。
+backup_and_link "$DOTFILES_DIR/.claude/CLAUDE.md" "$HOME/.pi/agent/CLAUDE.md"          # pi は agent dir の CLAUDE.md を context file として読む。AGENTS.md があるとそちらだけが読まれるので置かない
+backup_and_link "$DOTFILES_DIR/.pi/agent/APPEND_SYSTEM.md" "$HOME/.pi/agent/APPEND_SYSTEM.md"
+python3 "$DOTFILES_DIR/scripts/claude-agents-to-pi.py"   # ~/.pi/agent/agents/ を .claude/agents から生成（pi-subagents 用。生成物は追跡しない。元を直したら再実行）
+backup_and_link "$DOTFILES_DIR/.claude/skills" "$HOME/.pi/agent/skills"
+mkdir -p "$HOME/.pi/agent/extensions"
+for ext in "$DOTFILES_DIR"/.pi/agent/extensions/*.ts; do
+  backup_and_link "$ext" "$HOME/.pi/agent/extensions/$(basename "$ext")"
+done
 
 echo "✅ Dotfiles installation completed!"
 
@@ -251,6 +262,27 @@ if [[ -f "$DOTFILES_DIR/scripts/install-claude-plugins.sh" ]]; then
     else
         echo "⏭️  Skipping Claude Code plugins setup"
         echo "   You can run it later with: ./scripts/install-claude-plugins.sh"
+    fi
+fi
+
+# ==============================================================================
+# pi Packages Setup (Optional)
+# ==============================================================================
+
+echo ""
+if command -v pi &> /dev/null; then
+    echo "🔌 pi packages setup available"
+    read -p "Do you want to install pi packages now? (y/N): " setup_pi_pkgs
+    if [[ "$setup_pi_pkgs" =~ ^[Yy]$ ]]; then
+        # superpowers / ponytail: Claude Code と同じ plugin の pi package 版。pi-subagents: ~/.pi/agent/agents/ の
+        # subagent 定義を動かす。pi-lens: LSP 診断・定義・参照（Claude Code の typescript-lsp / pyright-lsp / gopls-lsp 相当。
+        # 既定で自動フォーマット・autofix・書き込み時テストも入る）。pi は source で同一性を判定するので再実行は冪等
+        for pkg in git:github.com/obra/superpowers git:github.com/DietrichGebert/ponytail npm:pi-subagents npm:pi-lens; do
+            pi install "$pkg"
+        done
+    else
+        echo "⏭️  Skipping pi packages setup"
+        echo "   You can run it later with: pi install git:github.com/obra/superpowers git:github.com/DietrichGebert/ponytail npm:pi-subagents npm:pi-lens"
     fi
 fi
 

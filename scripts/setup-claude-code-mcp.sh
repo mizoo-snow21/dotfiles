@@ -44,6 +44,17 @@ else
     claude mcp add -s user flint-chart -- npx -y flint-chart-mcp
 fi
 
+# pi は Claude Code の mcpServers 形式をそのまま読む（pi docs mcp.md: "Copy the existing mcpServers entry"）。
+# ~/.claude.json を正本にして丸ごと写す。pi 専用のエントリは持たない。
+# 一時ファイル + mv: 旧 install.sh が張った symlink が残っていても辿らず置き換える（dotfiles に秘密が落ちない）。
+# `pi mcp list` は未接続サーバー（mfc_ca はサインイン前）があると exit 1 するのでここでは呼ばない。
+if command -v pi &> /dev/null && command -v jq &> /dev/null; then
+    mkdir -p "$HOME/.pi/agent"
+    pi_mcp_tmp=$(mktemp "$HOME/.pi/agent/mcp.json.XXXXXX")
+    jq '{mcpServers}' "$HOME/.claude.json" > "$pi_mcp_tmp" && mv -f "$pi_mcp_tmp" "$HOME/.pi/agent/mcp.json"
+    echo "✅ Copied mcpServers to pi: ~/.pi/agent/mcp.json (run 'pi mcp login mfc_ca' once for OAuth)"
+fi
+
 echo ""
 echo "🔎 Current Claude Code MCP servers:"
 claude mcp list
