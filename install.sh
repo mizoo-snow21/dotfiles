@@ -118,6 +118,9 @@ backup_and_link "$DOTFILES_DIR/.config/opencode" "$HOME/.config/opencode"
 # pi packages は下の "pi Packages Setup" 節で入れる。
 backup_and_link "$DOTFILES_DIR/.pi/agent/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"          # pi 専用の指示。進め方は pstack に任せるので、Claude Code の CLAUDE.md は pi に読ませない
 backup_and_link "$DOTFILES_DIR/.pi/agent/skills" "$HOME/.pi/agent/skills"
+# pstack のロールごとのモデル（/setup-pstack と pstack_config が書く。リンク先へそのまま書き込まれる）
+mkdir -p "$HOME/.pi/agent/pstack"
+backup_and_link "$DOTFILES_DIR/.pi/agent/pstack/models.json" "$HOME/.pi/agent/pstack/models.json"
 mkdir -p "$HOME/.pi/agent/extensions"
 for ext in "$DOTFILES_DIR"/.pi/agent/extensions/*.ts; do
   backup_and_link "$ext" "$HOME/.pi/agent/extensions/$(basename "$ext")"
