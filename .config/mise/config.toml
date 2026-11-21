@@ -22,6 +22,8 @@ python = "latest"
 terraform = "latest"
 # Python の型チェッカー（Astral）。pi-lens が言語サーバーとして起動する（.pi-lens/config.json）
 ty = "latest"
+# Python の lint と整形（Astral）。プロジェクトの外やシェルからも使う（プロジェクトでは uv run ruff でも可）
+ruff = "latest"
 uv = "latest"
 
 [settings]
