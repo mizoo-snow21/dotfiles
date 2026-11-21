@@ -69,6 +69,8 @@ SCOPES = " ".join(
             "connected_account.read",
             "transaction.read",
             "transaction.write",
+            "journal_rule.read",
+            "journal_rule.write",
         ]
     ]
     + ["mfc/box/files.read", "mfc/box/files.write"]
@@ -292,8 +294,14 @@ def mcp_call(tool, arguments):
             h["Mcp-Session-Id"] = sid
         status, rh, body = http("POST", mcp_url(), h, json.dumps(payload).encode())
         if status >= 400:
+            # MCP 側の必要スコープが増えると 401 invalid_token になり、不足分は WWW-Authenticate にしか出ない
             raise SystemExit(
-                "MCP HTTP %d: %s" % (status, body[:200].decode("utf-8", "replace"))
+                "MCP HTTP %d: %s %s"
+                % (
+                    status,
+                    body[:200].decode("utf-8", "replace"),
+                    _header_ci(rh, "www-authenticate") or "",
+                )
             )
         return _header_ci(rh, "mcp-session-id"), body.decode("utf-8", "replace")
 
