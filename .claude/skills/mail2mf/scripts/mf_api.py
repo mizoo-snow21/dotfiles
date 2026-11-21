@@ -30,7 +30,28 @@ PKCE_SERVICE = "mail2mf-mfc-pkce"
 TOKEN_URL = "https://api.biz.moneyforward.com/token"
 AUTHORIZE_URL = "https://api.biz.moneyforward.com/authorize"
 BOX_URL = "https://api.box.moneyforward.com/v1/files"
-MCP_URL = "https://beta.mcp.developers.biz.moneyforward.com/mcp/ca/v3"
+
+
+def mcp_url(claude_json=None):
+    """MCP エンドポイント。内部 URL なのでコードには置かない。
+    MFC_CA_MCP_URL があればそれ、無ければ ~/.claude.json に `claude mcp add`（scripts/setup-claude-code-mcp.sh）が
+    登録した mfc_ca の url を使う。どちらも無ければ即終了。"""
+    url = os.environ.get("MFC_CA_MCP_URL")
+    if url:
+        return url
+    path = claude_json or os.path.expanduser("~/.claude.json")
+    try:
+        with open(path) as f:
+            url = json.load(f)["mcpServers"]["mfc_ca"]["url"]
+    except (OSError, KeyError, TypeError, ValueError):
+        url = None
+    if not url:
+        raise SystemExit(
+            "mfc_ca の MCP URL が見つからない。MFC_CA_MCP_URL を設定するか "
+            "scripts/setup-claude-code-mcp.sh で mfc_ca を登録して。"
+        )
+    return url
+
 REDIRECT_URI = "http://localhost:3118/callback"
 SCOPES = " ".join(
     [
@@ -48,6 +69,8 @@ SCOPES = " ".join(
             "connected_account.read",
             "transaction.read",
             "transaction.write",
+            "journal_rule.read",
+            "journal_rule.write",
         ]
     ]
     + ["mfc/box/files.read", "mfc/box/files.write"]
@@ -269,10 +292,16 @@ def mcp_call(tool, arguments):
         h = dict(base)
         if sid:
             h["Mcp-Session-Id"] = sid
-        status, rh, body = http("POST", MCP_URL, h, json.dumps(payload).encode())
+        status, rh, body = http("POST", mcp_url(), h, json.dumps(payload).encode())
         if status >= 400:
+            # MCP 側の必要スコープが増えると 401 invalid_token になり、不足分は WWW-Authenticate にしか出ない
             raise SystemExit(
-                "MCP HTTP %d: %s" % (status, body[:200].decode("utf-8", "replace"))
+                "MCP HTTP %d: %s %s"
+                % (
+                    status,
+                    body[:200].decode("utf-8", "replace"),
+                    _header_ci(rh, "www-authenticate") or "",
+                )
             )
         return _header_ci(rh, "mcp-session-id"), body.decode("utf-8", "replace")
 

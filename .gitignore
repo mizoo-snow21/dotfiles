@@ -103,3 +103,6 @@ docs/superpowers/
 
 # opencode service password (machine-local secret)
 .config/opencode/service.json
+
+# pi: ~/.claude.json から写すローカル設定（内部 URL を含む）
+.pi/agent/mcp.json

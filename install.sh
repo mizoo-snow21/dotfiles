@@ -107,11 +107,21 @@ backup_and_link "$DOTFILES_DIR/.codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
 backup_and_link "$DOTFILES_DIR/.codex/rules" "$HOME/.codex/rules"
 # opencode: opencode.jsonc と plugins/ をリポジトリで持つ（node_modules は下の mise 節で入れる）
 backup_and_link "$DOTFILES_DIR/.config/opencode" "$HOME/.config/opencode"
-# pi は AGENTS.md だけリンクする。~/.pi/agent には auth.json・sessions/・trust.json と
+# pi は個別ファイル/ディレクトリをリンクする。~/.pi/agent には auth.json・sessions/・trust.json と
 # インストーラの実体 (install/, bin/) が同居している。settings.json は持たない: pi がそこへ
 # deviceId (ChatGPT ログインで端末 ID として送るインストール固有の UUID) を書き、消しても
 # 作り直すため、公開リポジトリに載る (2026-10-12 確認)。extensions/rtk.ts は下の rtk 節で生成する
-backup_and_link "$DOTFILES_DIR/.pi/agent/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
+# skills/ は pi 専用（.pi/agent/skills）。pi でも使う skill だけを .claude/skills へリンクしている。
+# ~/.agents/skills は pi が標準で読むので、下の "pi Packages Setup" 節で settings.json から除外する。
+# agents/ は pi-pstack の同梱定義を使う。ユーザー定義があれば既存の agents/ はそのまま残す。
+# mcp.json はローカル: ~/.claude.json を正本に scripts/setup-claude-code-mcp.sh が写す。
+# pi packages は下の "pi Packages Setup" 節で入れる。
+backup_and_link "$DOTFILES_DIR/.pi/agent/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"          # pi 専用の指示。進め方は pstack に任せるので、Claude Code の CLAUDE.md は pi に読ませない
+backup_and_link "$DOTFILES_DIR/.pi/agent/skills" "$HOME/.pi/agent/skills"
+mkdir -p "$HOME/.pi/agent/extensions"
+for ext in "$DOTFILES_DIR"/.pi/agent/extensions/*.ts; do
+  backup_and_link "$ext" "$HOME/.pi/agent/extensions/$(basename "$ext")"
+done
 
 echo "✅ Dotfiles installation completed!"
 
@@ -251,6 +261,115 @@ if [[ -f "$DOTFILES_DIR/scripts/install-claude-plugins.sh" ]]; then
     else
         echo "⏭️  Skipping Claude Code plugins setup"
         echo "   You can run it later with: ./scripts/install-claude-plugins.sh"
+    fi
+fi
+
+# ==============================================================================
+# Claude Code Install (Optional)
+# ==============================================================================
+
+echo ""
+if command -v claude &> /dev/null; then
+    echo "✅ Claude Code already installed ($(claude --version 2>/dev/null | head -1))"
+else
+    echo "📦 Claude Code is not installed"
+    read -p "Do you want to install Claude Code now (curl -fsSL https://claude.ai/install.sh | bash)? (y/N): " setup_claude
+    if [[ "$setup_claude" =~ ^[Yy]$ ]]; then
+        curl -fsSL https://claude.ai/install.sh | bash
+        export PATH="$HOME/.local/bin:$PATH"
+    else
+        echo "⏭️  Skipping Claude Code install"
+        echo "   You can run it later with: curl -fsSL https://claude.ai/install.sh | bash"
+    fi
+fi
+
+# ==============================================================================
+# Cursor CLI Install (Optional)
+# ==============================================================================
+
+echo ""
+if command -v cursor-agent &> /dev/null; then
+    echo "✅ Cursor CLI already installed ($(cursor-agent --version 2>/dev/null | head -1))"
+else
+    echo "📦 Cursor CLI is not installed"
+    read -p "Do you want to install Cursor CLI now (curl https://cursor.com/install -fsS | bash)? (y/N): " setup_cursor_cli
+    if [[ "$setup_cursor_cli" =~ ^[Yy]$ ]]; then
+        curl https://cursor.com/install -fsS | bash
+        export PATH="$HOME/.local/bin:$PATH"
+    else
+        echo "⏭️  Skipping Cursor CLI install"
+        echo "   You can run it later with: curl https://cursor.com/install -fsS | bash"
+    fi
+fi
+
+# ==============================================================================
+# opencode Install (Optional)
+# ==============================================================================
+
+echo ""
+if command -v opencode &> /dev/null; then
+    echo "✅ opencode already installed ($(opencode --version 2>/dev/null | head -1))"
+else
+    echo "📦 opencode is not installed"
+    read -p "Do you want to install opencode now (curl -fsSL https://opencode.ai/install | bash)? (y/N): " setup_opencode
+    if [[ "$setup_opencode" =~ ^[Yy]$ ]]; then
+        curl -fsSL https://opencode.ai/install | bash
+        export PATH="$HOME/.opencode/bin:$PATH"
+        echo "   Next: run 'opencode auth login' for OpenCode Go and any other providers."
+    else
+        echo "⏭️  Skipping opencode install"
+        echo "   You can run it later with: curl -fsSL https://opencode.ai/install | bash"
+    fi
+fi
+
+# ==============================================================================
+# pi Install (Optional)
+# ==============================================================================
+
+echo ""
+if command -v pi &> /dev/null; then
+    echo "✅ pi already installed ($(pi --version 2>/dev/null))"
+else
+    echo "📦 pi (coding agent) is not installed"
+    read -p "Do you want to install pi now (curl -fsSL https://pi.dev/install.sh | sh)? (y/N): " setup_pi
+    if [[ "$setup_pi" =~ ^[Yy]$ ]]; then
+        curl -fsSL https://pi.dev/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+        echo "   Next: run 'pi', then /login (openai or anthropic) and /model to pick the default model."
+        echo "   settings.json is not tracked (per-install deviceId), so the default model is not restored."
+    else
+        echo "⏭️  Skipping pi install"
+        echo "   You can run it later with: curl -fsSL https://pi.dev/install.sh | sh"
+    fi
+fi
+
+# ==============================================================================
+# pi Packages Setup (Optional)
+# ==============================================================================
+
+echo ""
+if command -v pi &> /dev/null; then
+    pi_packages=(
+        git:github.com/kkgogogo17/pi-pstack@v0.1.0
+        git:github.com/DietrichGebert/ponytail
+        npm:pi-lens
+        npm:pi-web-access
+        npm:pi-agent-browser
+    )
+    echo "🔌 pi packages setup available"
+    read -p "Do you want to install pi packages now? (y/N): " setup_pi_pkgs
+    if [[ "$setup_pi_pkgs" =~ ^[Yy]$ ]]; then
+        # pi-pstack が進め方と子エージェントを提供する。pi-subagents はツール名が競合するので入れない。
+        for pkg in "${pi_packages[@]}"; do
+            pi install "$pkg"
+        done
+        # Claude Code と共有の ~/.agents/skills を pi から外す（pstack の tdd / teach と同名の skill があり、そちらが優先されるため）
+        pi_settings="$HOME/.pi/agent/settings.json"
+        jq 'if ((.skills // []) | index("!~/.agents/skills/**")) then . else .skills = ((.skills // []) + ["!~/.agents/skills/**"]) end' "$pi_settings" > "$pi_settings.tmp" && mv "$pi_settings.tmp" "$pi_settings"
+    else
+        echo "⏭️  Skipping pi packages setup"
+        echo "   You can run these commands later:"
+        printf '   pi install %s\n' "${pi_packages[@]}"
     fi
 fi
 

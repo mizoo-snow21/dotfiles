@@ -306,6 +306,18 @@ class TestMcp(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 mf_api.mcp_call("mfc_ca_getTransactions", {})
 
+    def test_mcp_call_401_reports_required_scope(self):
+        # MF が MCP に新ツールを足すと必要スコープが増え、古いトークンは 401 invalid_token になる
+        hint = 'Bearer error="invalid_token", scope="mfc/accounting/journal_rule.read"'
+        responses = [(401, {"www-authenticate": hint}, b"invalid_token")]
+        with (
+            mock.patch.object(mf_api, "get_access_token", return_value="tok"),
+            mock.patch.object(mf_api, "http", side_effect=responses),
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                mf_api.mcp_call("mfc_ca_getTransactions", {})
+        self.assertIn("journal_rule.read", str(cm.exception.code))
+
     def test_parse_sse_unparseable_exits(self):
         for bad in ("", "<html>oops</html>"):
             with self.subTest(bad=bad):
@@ -373,6 +385,7 @@ class TestAuth(unittest.TestCase):
         printed = "".join(c[0][0] for c in out.write.call_args_list)
         self.assertIn(mf_api.AUTHORIZE_URL, printed)
         self.assertIn("code_challenge=", printed)
+        self.assertIn("mfc%2Faccounting%2Fjournal_rule.write", printed)
         self.assertIn(pk["state"], printed)
 
     def test_auth_exchange_state_mismatch_aborts_and_deletes(self):
@@ -465,3 +478,22 @@ class TestAuth(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMcpUrl(unittest.TestCase):
+    """内部エンドポイントの URL はコードに置かず、env か ~/.claude.json（Claude Code の登録値）から取る。"""
+
+    def test_env_wins(self):
+        with mock.patch.dict(os.environ, {"MFC_CA_MCP_URL": "https://env.example/mcp"}):
+            self.assertEqual(mf_api.mcp_url(claude_json="/nonexistent.json"), "https://env.example/mcp")
+
+    def test_falls_back_to_claude_json_and_fails_fast_when_missing(self):
+        import tempfile
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            json.dump({"mcpServers": {"mfc_ca": {"type": "http", "url": "https://cfg.example/mcp"}}}, f)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("MFC_CA_MCP_URL", None)
+            self.assertEqual(mf_api.mcp_url(claude_json=f.name), "https://cfg.example/mcp")
+            with self.assertRaises(SystemExit):
+                mf_api.mcp_url(claude_json="/nonexistent.json")

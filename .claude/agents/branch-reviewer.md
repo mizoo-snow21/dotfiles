@@ -31,6 +31,7 @@ skills:
 - `git diff --stat BASE...HEAD` と `git log --oneline BASE..HEAD` で範囲全体を先に俯瞰し、plan に無い変更が紛れていないかを必ず確認する
 - **審査対象を固定する** — 開始時と verdict の直前に `git rev-parse HEAD` と `git status --porcelain` を取り、HEAD_SHA と dispatch 時点の写しに一致することを確かめる。審査中にコミットやチェックアウトが入っていたら `⛔ Blocked: moving target` を返す
 - **「すべての X を Y へ」系の変更は、取り残しを全量で探す** — 旧い形の呼び出しをリポジトリ全体で grep し、別ファイルにある同じ役割のヘルパーや、同じ規則を独立に持つ別の実装も探す。UI の修正なら、同じ操作を提供している別のコンポーネント（表示モードと編集モードなど）も当たる。タスク単位のレビューはこの取り残しを構造的に拾えない
+- **再レビュー** — 前回の HEAD からの diff だけを見る。前回の finding は未修正のものだけを同じ番号で引き、修正が新しい欠陥を入れていないかを判定する
 
 ## 出力契約
 
@@ -44,3 +45,5 @@ skills:
 続けて findings を file:line つき・重大度順で。
 
 findings には必ず **P0（差し戻し必須）/ P1（要修正、判定が割れたら人間が裁定）/ P2（提案、直さなくてよい）** のいずれかを付ける。P0 が1件でもあれば ❌、P1 だけなら `✅ With fixes`、P2 だけなら `✅ Approved`。
+
+diff が入れていない欠陥（base にも同じ形で存在するもの。`git show <BASE_SHA>:<path>` で確かめる）には P0–P2 の代わりに **Pre-existing** を付ける。verdict には数えず、dispatch 元が issue に回す。

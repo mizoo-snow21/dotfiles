@@ -125,7 +125,7 @@ When falling back, start a **new session** (do not use `resume --last` since the
 - When a finding is a false positive, explain why clearly in the resume prompt so codex doesn't re-raise it.
 - If codex cannot run files (missing deps), fall back to static analysis of the code.
 - **Re-review from the working tree. Do not commit or push to get there** — the loop needs the updated file contents in the prompt, not a pushed branch.
-- **A usage limit is not a rate limit.** `You've hit your usage limit … try again at <date>` covers the whole account — every model, and `@codex review` on GitHub — so the fallback list above cannot help. Stop, note the reset time, and switch to the CLAUDE.md fallback (`pstack:interrogate`). Before each later review, probe codex with a one-line `codex exec`, and return to it once it answers.
+- **A usage limit is not a rate limit.** `You've hit your usage limit … try again at <date>` covers the whole account — every model, and `@codex review` on GitHub — so the fallback list above cannot help. Stop, note the reset time, and switch to the CLAUDE.md fallback (`Agent(judge)`). Before each later review, probe codex with a one-line `codex exec`, and return to it once it answers.
 
 ## What the review authorizes
 

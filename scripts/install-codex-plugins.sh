@@ -7,20 +7,14 @@
 
 set -euo pipefail
 
-# marketplace ソース (owner/repo | HTTPS/SSH URL | ローカルパス)
-MARKETPLACES=(
-    "michael-denyer/pstack-claude"
-)
+# marketplace ソース (owner/repo | HTTPS/SSH URL | ローカルパス)。2026-11-08 に pstack を外して空
+MARKETPLACES=()
 
 # <plugin>@<marketplace>
-PLUGINS=(
-    "pstack@pstack-claude"
-)
+PLUGINS=()
 
-# 並列サブエージェント系スキル (arena/interrogate/how/why/reflect/architect) に必要
-FEATURES=(
-    "multi_agent"
-)
+# features.<name> = true を config.toml に入れる。multi_agent は pstack の並列スキル用だったので外した
+FEATURES=()
 
 CODEX_CONFIG="${HOME}/.codex/config.toml"
 
