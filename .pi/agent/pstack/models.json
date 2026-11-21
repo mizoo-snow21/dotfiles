@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "roles": {
+    "feature, refactoring": "opencode-go/deepseek-v4.1-flash:high",
+    "bug-fix": "anthropic/claude-fable-5-2:low",
+    "perf-issue": "anthropic/claude-fable-5-2:low",
+    "hillclimb": "opencode-go/deepseek-v4.1-flash:high",
+    "judgment and prose": "anthropic/claude-fable-5-2:low",
+    "hardest tasks": "anthropic/claude-fable-5-2:high",
+    "how explorer": "openai/gpt-6.2-sol:high",
+    "how explainer": "anthropic/claude-fable-5-2:low",
+    "how critics": "anthropic/claude-opus-5-5:high",
+    "why investigators": "openai/gpt-6.2-sol:high",
+    "why synthesizer": "openai/gpt-6.2-sol:medium",
+    "reflect tooling": "openai/gpt-6.2-sol:high",
+    "reflect judgment, divergent, synthesizer": "anthropic/claude-opus-5-5:high",
+    "arena runners": [
+      "opencode-go/deepseek-v4.1-flash:high",
+      "openai/gpt-6.2-sol:high"
+    ],
+    "arena cross-judge pool": [
+      "openai/gpt-6.2-astra:xhigh",
+      "anthropic/claude-opus-5-5:xhigh"
+    ],
+    "swarm workers": "opencode-go/deepseek-v4.1-flash:high",
+    "architect runners": [
+      "openai/gpt-6.2-sol:high",
+      "anthropic/claude-opus-5-5:high"
+    ],
+    "interrogate reviewers": [
+      "openai/gpt-6.2-sol:high",
+      "anthropic/claude-opus-5-5:xhigh"
+    ]
+  }
+}
