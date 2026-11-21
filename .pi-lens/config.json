@@ -1,15 +1,31 @@
 {
   "lsp": {
-    "disabledServers": ["python"],
+    "disabledServers": [
+      "python"
+    ],
     "servers": {
       "ty": {
         "name": "ty",
-        "extensions": [".py", ".pyi"],
-        "command": ["ty", "server"],
-        "rootMarkers": ["pyproject.toml", "ty.toml"],
+        "extensions": [
+          ".py",
+          ".pyi"
+        ],
+        "command": [
+          "sh",
+          "-c",
+          "d=$PWD; while [ \"$d\" != / ]; do [ -x \"$d/.venv/bin/ty\" ] && exec \"$d/.venv/bin/ty\" server; d=$(dirname \"$d\"); done; exec ty server"
+        ],
+        "rootMarkers": [
+          "pyproject.toml",
+          "ty.toml"
+        ],
         "role": "language"
       }
     }
   },
-  "dispatch": { "disabledRunners": ["pyright"] }
+  "dispatch": {
+    "disabledRunners": [
+      "pyright"
+    ]
+  }
 }
