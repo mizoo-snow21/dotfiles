@@ -1,0 +1,4 @@
+{
+  "lsp": { "disabledServers": ["python"] },
+  "dispatch": { "disabledRunners": ["pyright"] }
+}
