@@ -106,3 +106,4 @@ docs/superpowers/
 
 # pi: ~/.claude.json から写すローカル設定（内部 URL を含む）
 .pi/agent/mcp.json
+.claude/timeline/
