@@ -354,7 +354,7 @@ fi
 echo ""
 if command -v pi &> /dev/null; then
     pi_packages=(
-        git:github.com/kkgogogo17/pi-pstack@v0.1.0
+        git:github.com/mizoo-snow21/pi-pstack@main
         git:github.com/DietrichGebert/ponytail
         npm:pi-lens
         npm:pi-web-access
@@ -364,6 +364,7 @@ if command -v pi &> /dev/null; then
     read -p "Do you want to install pi packages now? (y/N): " setup_pi_pkgs
     if [[ "$setup_pi_pkgs" =~ ^[Yy]$ ]]; then
         # pi-pstack が進め方と子エージェントを提供する。pi-subagents はツール名が競合するので入れない。
+        # pi-pstack は自分のフォーク（本家 kkgogogo17/pi-pstack に、skill の呼び出し設定と「常に許可」を足したもの）を main で追う。
         for pkg in "${pi_packages[@]}"; do
             pi install "$pkg"
         done
