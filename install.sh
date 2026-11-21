@@ -122,6 +122,10 @@ mkdir -p "$HOME/.pi/agent/extensions"
 for ext in "$DOTFILES_DIR"/.pi/agent/extensions/*.ts; do
   backup_and_link "$ext" "$HOME/.pi/agent/extensions/$(basename "$ext")"
 done
+# pi-lens は ~/.pi-lens にキャッシュ・ログが同居するので config.json だけをリンクする。
+# Python の型チェック（pyright）は止め、ruff の lint と自動整形だけを使う（定義ジャンプは jedi が残る）
+mkdir -p "$HOME/.pi-lens"
+backup_and_link "$DOTFILES_DIR/.pi-lens/config.json" "$HOME/.pi-lens/config.json"
 
 echo "✅ Dotfiles installation completed!"
 
