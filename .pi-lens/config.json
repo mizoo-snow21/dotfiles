@@ -1,4 +1,15 @@
 {
-  "lsp": { "disabledServers": ["python"] },
+  "lsp": {
+    "disabledServers": ["python"],
+    "servers": {
+      "ty": {
+        "name": "ty",
+        "extensions": [".py", ".pyi"],
+        "command": ["ty", "server"],
+        "rootMarkers": ["pyproject.toml", "ty.toml"],
+        "role": "language"
+      }
+    }
+  },
   "dispatch": { "disabledRunners": ["pyright"] }
 }

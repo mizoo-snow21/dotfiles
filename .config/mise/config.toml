@@ -20,6 +20,8 @@ node = "latest"
 pnpm = "latest"
 python = "latest"
 terraform = "latest"
+# Python の型チェッカー（Astral）。pi-lens が言語サーバーとして起動する（.pi-lens/config.json）
+ty = "latest"
 uv = "latest"
 
 [settings]
