@@ -8,7 +8,7 @@ Personal dotfiles for macOS development environment.
 - **`.zprofile`** - Zsh profile with Homebrew environment and PATH setup
 - **`.zshenv`** - Environment variables for every zsh (interactive or not)
 - **`.config/mise`** - mise (development environment manager) configuration
-- **`.config/ghostty`**, **`.config/zellij`** - Terminal and multiplexer configuration
+- **`.config/ghostty`** - Terminal configuration
 - **`.config/rtk`** - rtk (token-compression proxy) configuration
 - **`.config/opencode`** - opencode configuration and its rtk plugin (v2 plugin API)
 - **`.claude`** - Claude Code settings, skills, agents and hooks
