@@ -88,10 +88,10 @@ cd ~/dotfiles
 One-time step on a new machine. It needs sudo, so run it in a real terminal (not through an agent):
 
 ```bash
-PORTLESS_SYNC_HOSTS=0 portless service install   # root launchd service on 443, no /etc/hosts edits
+scripts/install-portless-service.sh   # root launchd service on 443, no /etc/hosts edits
 ```
 
-Re-run it after `mise up` changes node or portless — the launchd plist bakes their absolute paths. `portless service status` shows whether it is healthy.
+`portless service install` bakes the versioned node and portless paths into the launchd plist, so `mise up` used to break the service at the next boot. The script runs it and then points the plist at mise's `latest` links. Use the script instead of running `portless service install` directly. `portless service status` shows whether it is healthy.
 
 ### Cursor IDE Configuration
 - IDE settings and preferences
