@@ -37,6 +37,11 @@
 - 場所が分かっているファイル: read
 - 文字列・設定・ログ・コメント: rg
 
+## Python
+
+- 依存・環境・実行は uv で扱う（`uv add` / `uv remove` / `uv sync` / `uv run`）。単体スクリプトは inline metadata か `--script` を使う。
+- プロジェクトの Python の版は `uv python pin <版>` で決める（`.python-version` に書かれる）。mise の python はプロジェクト外の既定だけに使う。
+
 ## UI/UX
 
 - 説明はレイアウトに任せ、補助ラベルや説明文は足さない。
