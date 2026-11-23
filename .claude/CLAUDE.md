@@ -177,6 +177,7 @@ After ANY correction from the user, put the fix where it is loaded at the moment
 - Branch naming: `feat/<feature-name>`, `fix/<bug-name>`, etc.
 - Commit early and often on the feature branch
 - Only merge to main after all reviews pass and `finishing-a-development-branch` is complete
+- **`finishing-a-development-branch` local delta: in `mizoo-snow21/*` repos, skip the options menu** (user directive, 2026-11-23). Once reviews pass, push, open the PR, merge it, and delete the merged branch in one run, naming what you delete in the same reply. Other owners' repos keep the menu.
 
 ### Schema & Parallel Work (MUST)
 (user directive, 2026-10-24)
