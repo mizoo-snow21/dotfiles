@@ -11,6 +11,8 @@ node = "latest"
 # codex は self-updater が壊れる（pnpm 誤判定）ので `codex update` ではなく `mise up npm:@openai/codex`（.zshrc で振り替え済み）
 "npm:@openai/codex" = "latest"
 "npm:@googleworkspace/cli" = "latest"
+# pi-agent-browser が呼ぶ CLI。npm -g だと node を上げるたびに消える
+"npm:agent-browser" = "latest"
 "npm:claude-code-monitor" = "latest"
 "npm:gitnexus" = "latest"
 "npm:portless" = "latest"
