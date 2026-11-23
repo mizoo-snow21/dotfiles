@@ -362,6 +362,7 @@ if command -v pi &> /dev/null; then
         npm:pi-lens
         npm:pi-web-access
         npm:pi-agent-browser
+        git:github.com/Andy8647/pi-tidy
     )
     echo "🔌 pi packages setup available"
     read -p "Do you want to install pi packages now? (y/N): " setup_pi_pkgs
